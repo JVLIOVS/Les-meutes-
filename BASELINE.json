@@ -1,0 +1,27 @@
+{
+  "product": "EMMET V03 Fondations",
+  "original_commit": "ee74de4224dca17195c0a50f372d201d2d0a1e60",
+  "audit_date": "2026-10-26",
+  "files_sha256": {
+    "package.json": "6a531d31698c8704d12b94d67fdeaf13790e4a3e131b938ac18da77ac7c19a6f",
+    "README.md": "e1dd15c8092c9b00cb3fc892f750ee7a5fe20e345cade9e59c8a866478280abf",
+    ".gitignore": "a23a4d7dc4f098afbfd9c3aaee0b272ff374b2e77187758843e3412190ec289c",
+    "web/app.js": "8b27add6f4232ba7f631c6111fda026a226a51271395bc95dc0eb1e50d678f73",
+    "web/audio.js": "343020113e04b7599723cd07378eab1b15e88fb2019fdf845d04bdbcc0974ed5",
+    "web/data.js": "af32502115163a502ecffef0865a628363f1a6611ef59de50ca53833c82a0bfa",
+    "web/icon.svg": "685d7d0f7d3b066c504236ff19794866fd55bc26def7b611fe28d018e1837bd1",
+    "web/icons.js": "9324999250713d13d72da7ecc497d8da9ff061ffbb10d98995aa4045d5dfd0b9",
+    "web/index.html": "1900de57718a8f02330dd6d64f596850fa9e6543440b1f63ac92a2ca75327a16",
+    "web/render.js": "80c8189617b89ca847b4b1f9c9a420de2bcb114d1caff668d2f27c3ba72c06b4",
+    "web/sim.js": "0718a213139118b5f9d17703fddf2e38ba2b855218d1859a42ddb328245c7405",
+    "web/style.css": "8b2a131f1b5244caedb8fb324e1d93c9e913c4165a2df847ae477b50a51ebc14",
+    "scripts/build.mjs": "1f556264323f6a4d68f9de2929edc9c7dd9b901773c09df4a2a45b4e3c9941f5",
+    "tests/audio.test.mjs": "e7a6b937e80053e747d9e3c6e9923a6a08075051990b1bbe9f9836dd9a77ffbc",
+    "tests/sim.test.mjs": "11aa00ac94664372732cd502b3c1e7604adb2c335f73c53fc0ff5f6e05b64df2",
+    "docs/images/prototype01.jpg": "7df3bb5a17d4f3be5010c0404d1135e45c896388efb83df9534582fa09f7849a",
+    "docs/images/prototype02.jpg": "617a0993301c08c7fd88b461997c1e1e45d40ce5e49c76499ffc3ccadf82d150",
+    "docs/images/prototype03-interior.jpg": "5f4d127b79a5063e14b03dbf70457b78cfca824c9622f730b5d228665ed44474",
+    "docs/images/prototype03-start.jpg": "2a703334985788e6143aff1d9b74a7b3dc7a7f31f790a62384166975e39906d0",
+    "docs/validation.md": "87ea8a03398ec296e90cebcd69a6468899cdee9fc6f4fd51d62a73884de4a8cc"
+  }
+}
