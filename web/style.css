@@ -2027,3 +2027,21 @@ h1 > span {
   opacity: 1;
   border-color: #dfb58e;
 }
+
+/* V04 — result causes */
+.debrief {
+  margin: 0.4rem 0 0.8rem;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #d9e4e8;
+}
+.debrief li {
+  padding: 0.35rem 0.6rem;
+  margin-top: 0.3rem;
+  border-left: 3px solid #efb395;
+  background: #ffffff0d;
+  border-radius: 4px;
+}

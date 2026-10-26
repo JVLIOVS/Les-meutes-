@@ -825,20 +825,7 @@ export class CityRenderer {
       });
     this.drawables.sort((a, b) => a.depth - b.depth);
     for (const item of this.drawables) item.draw();
-    for (const r of game.rallies) {
-      if (r.spawned >= r.count && game.time > r.release) continue;
-      const g = GATES[r.gate],
-        p = this.point(g.x, g.y, 1);
-      this.ring(g.x, g.y, 1.2 + Math.sin(this.t * 3) * 0.08, '#efb395', 0.7);
-      this.text(
-        `${r.count} · RASSEMBLEMENT`,
-        p.x,
-        p.y - 15,
-        clamp(this.tile * 0.27, 7, 10),
-        '#f1c5a8',
-        '800'
-      );
-    }
+    this.telegraph(game);
     this.effects(game);
     this.builders(game);
     if (game.phase === 'breach') this.cinematic(game);
@@ -861,6 +848,45 @@ export class CityRenderer {
       }
     }
     c.restore();
+  }
+  /** Announces what is coming: gates and headcount before a wave, route and contact time while rallying. */
+  telegraph(game) {
+    const size = clamp(this.tile * 0.27, 7, 10),
+      c = this.ctx;
+    if (['prepare', 'interval'].includes(game.phase))
+      for (const { gate, count } of game.wavePlan(game.wave + 1)) {
+        const g = GATES[gate],
+          p = this.point(g.x, g.y, 1);
+        this.ring(g.x, g.y, 1.1 + Math.sin(this.t * 2) * 0.06, '#efb395', 0.45);
+        this.text(`VAGUE ${game.wave + 1} · ${count}`, p.x, p.y - 15, size, '#f1c5a8', '800');
+      }
+    for (const r of game.rallies) {
+      const target = game.targets.find(b => b.id === r.target),
+        eta = game.rallyEta(r);
+      if (!target || eta === null || game.time > r.release + 2) continue;
+      const g = GATES[r.gate],
+        route = [g, ...game.path(g, target.access)].map(v => this.point(v.x, v.y, 0.05));
+      c.save();
+      c.setLineDash([this.tile * 0.25, this.tile * 0.2]);
+      c.lineDashOffset = -this.t * 18;
+      c.strokeStyle = '#efb395aa';
+      c.lineWidth = Math.max(1.5, this.tile * 0.08);
+      c.beginPath();
+      route.forEach((v, i) => (i ? c.lineTo(v.x, v.y) : c.moveTo(v.x, v.y)));
+      c.stroke();
+      c.restore();
+      const p = this.point(g.x, g.y, 1),
+        name = target.name ?? SERVICES[target.type]?.short ?? '';
+      this.ring(g.x, g.y, 1.2 + Math.sin(this.t * 3) * 0.08, '#efb395', 0.7);
+      this.text(
+        `${r.count} → ${name.toUpperCase()} · ${Math.ceil(eta)} s`,
+        p.x,
+        p.y - 15,
+        size,
+        '#f1c5a8',
+        '800'
+      );
+    }
   }
   serviceBuilding(s, game) {
     const p = this.point(s.x, s.y),

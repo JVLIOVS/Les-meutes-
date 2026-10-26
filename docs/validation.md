@@ -1,3 +1,25 @@
+# Validation — V04 · Mission témoin
+
+26 octobre 2026. 28 tests Node passent.
+
+| Livré | Preuve |
+| --- | --- |
+| Mission témoin (Les Lisières) : 320 crédits, vagues écrites à la main (1 rue → bifurcation → 2 fronts) | Test : `lines` (barrages en avant, 3★) et `fortress` (défense au palais, 2★) gagnent, `passive` perd, sur 3 graines. |
+| Économie serrée : revenus continus en vague et en accalmie, aucun revenu en préparation, plus de prime par dispersion | Test : impossible de bâtir plus de 3 services avant la vague 1 ; 60 s d'attente ne rapportent rien. |
+| Vagues annoncées : effectif par porte avant le lancement ; trajet, cible et temps de contact pendant le rassemblement | Test : la vague annoncée est la vague jouée. Capture `docs/images/v04-mission-temoin.jpg`. |
+| Foule sur cartes de flux (un calcul par destination au lieu d'un par personne) | Test : longueurs identiques à l'ancien routage optimal, détour autour des barrages. |
+| Bâtisseurs : restauration d'une ruine (type et niveau) à moitié prix | Test et capture du bouton RESTAURER. |
+| Bilan : causes (porte la plus dangereuse, services perdus, confiance) | Test (toute défaite a une cause) et capture. |
+| Gel n°1 corrigé (hérité du V03) : des personnes se bousculant sur un point de passage ne l'atteignaient jamais, la vague ne finissait pas | Test dédié + test de fumée : les 6 quartiers se terminent. |
+| Gel n°2 corrigé (hérité du V03) : commandement détruit → plus aucune vague ne pouvait démarrer | Test dédié. |
+| Amélioration de service : plus de soin complet caché (+80 de structure seulement) | Test. |
+
+Équilibrage : la mission témoin est réglée. Les quartiers 2 à 6 sont grossièrement rééquilibrés (budgets et premières vagues réduits, puis croissance plus forte) : une stratégie automatique simple atteint au moins la vague 2 partout et gagne parfois. Ils n'ont pas été réglés à la main.
+
+Navigateur : Chromium 390 × 844 tactile, du départ au bilan, sans erreur console. Pas d'appareil physique.
+
+---
+
 # Validation — Prototype 03.1 · Fondations (P0)
 
 26 octobre 2026. Reprise du V03 : vingt tests Node passent (16 d'origine + 4 régressions).

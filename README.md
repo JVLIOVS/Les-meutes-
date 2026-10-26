@@ -1,4 +1,6 @@
-# EMMET — Prototype 03 · Fondations
+# EMMET — V04 · Mission témoin
+
+> Nouveautés V04 : mission témoin en 3 vagues écrites, départ à 320 crédits, revenus continus, vagues annoncées (portes, effectifs, trajet et temps de contact), foule sur cartes de flux, restauration des ruines par les bâtisseurs, bilan explicatif. Détails et preuves : `docs/validation.md`. Les sections ci-dessous décrivent la base V03 ; les chiffres d'économie qui y figurent sont remplacés par ceux de `web/data.js`.
 
 Défense urbaine et construction dans le pays fictif de Nacreville. Jeu solo indépendant de STREETZ, en Canvas 2D isométrique.
 

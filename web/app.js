@@ -1,4 +1,14 @@
-import { DISTRICTS, EQUIPMENT, clamp, road, SERVICES, serviceFor, FORTIFICATIONS, REVISION } from './data.js';
+import {
+  DISTRICTS,
+  EQUIPMENT,
+  clamp,
+  road,
+  SERVICES,
+  serviceFor,
+  FORTIFICATIONS,
+  REVISION,
+  GATES,
+} from './data.js';
 import { CityGame } from './sim.js';
 import { CityRenderer } from './render.js';
 import { icon } from './icons.js';
@@ -247,7 +257,7 @@ function updateHud() {
   $('integrity-fill').style.width = game.integrity + '%';
   $('trust-fill').style.width = Math.max(0, game.trust) + '%';
   $('mission-objective').textContent =
-    `${game.builtCount} bâtiment${game.builtCount > 1 ? 's' : ''} · ${game.services.filter(s => s.state === 'empty').length} terrains libres · +${game.waveReward() - 150 - game.wave * 25} revenus / vague`;
+    `${game.builtCount} bâtiment${game.builtCount > 1 ? 's' : ''} · ${game.services.filter(s => s.state === 'empty').length} terrains libres · +${Math.round(game.income() * 60)} crédits / min en vague`;
   $('launch').hidden = !['prepare', 'interval'].includes(game.phase);
   $('launch-label').textContent =
     game.phase === 'interval' ? `VAGUE ${game.wave + 1} · ${Math.ceil(game.countdown)} s` : 'LANCER LA VAGUE';
@@ -255,7 +265,10 @@ function updateHud() {
     game.phase === 'interval'
       ? 'Touchez pour lancer maintenant'
       : game.service('command')
-        ? 'Vos services et vos défenses sont-ils prêts ?'
+        ? game
+            .wavePlan(game.wave + 1)
+            .map(({ gate, count }) => `${count} · ${GATES[gate].name}`)
+            .join(' + ')
         : 'Bâtissez votre poste de commandement';
   for (const b of document.querySelectorAll('[data-order]'))
     b.classList.toggle('active', b.dataset.order === game.command);
@@ -381,8 +394,21 @@ function updateSelection(force = false) {
         : obj.state === 'building'
           ? `Construction · ${Math.ceil(obj.duration - obj.progress)} s restantes`
           : obj.state === 'ruin'
-            ? 'Service détruit : reconstruisez-le depuis CONSTRUIRE.'
+            ? 'Service détruit. Les bâtisseurs du chantier peuvent le restaurer avec son niveau, ou bâtissez autre chose ici.'
             : `Niveau ${obj.tier}/3 · ${SERVICES[obj.type].desc}`;
+    if (obj.state === 'ruin' && obj.type) {
+      const issue = game.restoreIssue(obj);
+      add(
+        issue && issue !== 'Restauration en cours'
+          ? issue.toUpperCase()
+          : issue
+            ? 'RESTAURATION EN COURS'
+            : `RESTAURER · ${game.restoreCost(obj)}`,
+        () => game.restore(obj.id),
+        !!issue || game.money < game.restoreCost(obj),
+        true
+      );
+    }
     if (obj.state === 'built') {
       const cost = 80 + obj.tier * 40;
       add(
@@ -500,7 +526,14 @@ function result() {
   const won = game.phase === 'won',
     next = game.level < 5;
   showOverlay(
-    `<p class="eyebrow">${game.def.name.toUpperCase()} · BILAN</p><h2>${won ? 'Le quartier tient.' : 'Le périmètre a cédé.'}</h2><div class="result-stars">${Array.from({ length: 3 }, (_, i) => `<span style="opacity:${i < game.stars ? 1 : 0.15}">${icon('star')}</span>`).join('')}</div><p>${game.reason}</p><div class="result-stats"><div><b>${Math.round(game.integrity)}%</b><span>PALAIS PRÉSERVÉ</span></div><div><b>${game.stats.dispersed}</b><span>DISPERSIONS</span></div><div><b>${Math.round(game.trust)}%</b><span>CONFIANCE</span></div></div><p>${won ? `+${xp} XP · ${next ? 'Le quartier suivant est accessible.' : 'Les six quartiers ont tenu.'}` : 'Répartissez vos équipes entre les artères et renforcez les façades exposées.'}</p><div class="overlay-actions"><button class="primary" id="result-next">${won && next ? 'QUARTIER SUIVANT' : 'REJOUER'} ${icon('arrow')}</button><button class="secondary" id="result-home">CAMPAGNE</button></div>`,
+    `<p class="eyebrow">${game.def.name.toUpperCase()} · BILAN</p><h2>${won ? 'Le quartier tient.' : 'Le périmètre a cédé.'}</h2><div class="result-stars">${Array.from({ length: 3 }, (_, i) => `<span style="opacity:${i < game.stars ? 1 : 0.15}">${icon('star')}</span>`).join('')}</div><p>${game.reason}</p><div class="result-stats"><div><b>${Math.round(game.integrity)}%</b><span>PALAIS PRÉSERVÉ</span></div><div><b>${game.stats.dispersed}</b><span>DISPERSIONS</span></div><div><b>${Math.round(game.trust)}%</b><span>CONFIANCE</span></div></div>${
+      game.debrief().length
+        ? `<ul class="debrief">${game
+            .debrief()
+            .map(line => `<li>${line}</li>`)
+            .join('')}</ul>`
+        : ''
+    }<p>${won ? `+${xp} XP · ${next ? 'Le quartier suivant est accessible.' : 'Les six quartiers ont tenu.'}` : 'Relancez : la vague annoncée sera la même.'}</p><div class="overlay-actions"><button class="primary" id="result-next">${won && next ? 'QUARTIER SUIVANT' : 'REJOUER'} ${icon('arrow')}</button><button class="secondary" id="result-home">CAMPAGNE</button></div>`,
     card => {
       card.querySelector('#result-next').onclick = () => start(won && next ? game.level + 1 : game.level);
       card.querySelector('#result-home').onclick = home;
