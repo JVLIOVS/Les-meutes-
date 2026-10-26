@@ -1,3 +1,21 @@
+# Validation — Prototype 03.1 · Fondations (P0)
+
+26 octobre 2026. Reprise du V03 : vingt tests Node passent (16 d'origine + 4 régressions).
+
+| Constat de l'audit | Correction | Preuve |
+| --- | --- | --- |
+| T01 · aperçu de construction vert sur une rue, pose refusée | `buildPlot()` unique, utilisé par l'aperçu (`canPlace`/`canBuild` avec coordonnées) et par `buildService`. L'aperçu surligne le terrain réellement visé. | Test T01 (échoue sur V03) ; navigateur : rue (15,15) en rouge, terrain (6,6) surligné en vert, clic → commandement bâti. |
+| T02 · un saboteur au sol endommage un hélicoptère | `airborne(u)` : contact, pierres et sabotage ne visent que les unités au sol. | Test T02 (échoue sur V03) ; une patrouille reste sabotable. |
+| T03 · apparition refusée par le plafond de 420 comptée quand même | `spawn()` renvoie `false` ; l'apparition reste en attente. | Test T03 : 10 s de saturation, aucun effectif perdu. |
+| T08 · `stats.spent` incomplet | Toute dépense passe par `spend()`. | Test T08 sur 11 types de transactions. |
+| T12 · textes de quartier visant des bâtiments absents | Objectifs réécrits, champ `primary` inutilisé supprimé, bilan « PALAIS PRÉSERVÉ ». | Relecture. |
+
+Non-régression : une empreinte de 18 parties scriptées (6 quartiers × 3 graines, instantanés hachés) est identique avant/après le formatage et les corrections. Navigateur Chromium (Playwright, 1280 × 800 et 390 × 844 tactile) : départ, construction, vague, prise du palais (48/48 entrés) et bilan, sans erreur console. Ce n'est pas une certification sur appareil physique.
+
+Révision affichée et cache des modules : `REVISION` dans `web/data.js` (accueil, HUD, `?v=` du build).
+
+---
+
 # Validation — Prototype 03 · Fondations
 
 25 octobre 2026. Seize tests natifs Node passent.

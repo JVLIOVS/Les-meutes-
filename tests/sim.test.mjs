@@ -281,3 +281,93 @@ test('one ordinary construction and deployment strategy completes all three open
   assert.equal(g.wave, 3);
   assert.equal(g.stats.dispersed, 108);
 });
+
+// P0 regressions found in the V03 hand-off audit (T01, T02, T03, T08).
+test('T01: the construction preview gives the same verdict as the build itself', () => {
+  const g = new CityGame();
+  const plot = g.services[0];
+  for (const [x, y] of [
+    [9, 9],
+    [15, 12],
+    [plot.x + 2.5, plot.y],
+    [plot.x + 1.5, plot.y + 1],
+    [plot.x, plot.y],
+  ]) {
+    const preview = g.canPlace('build:command', x, y);
+    const probe = CityGame.restore(JSON.parse(JSON.stringify(g.snapshot())));
+    const built = probe.place('build:command', x, y);
+    assert.equal(preview === null, built !== null, `(${x},${y}) preview=${preview}`);
+  }
+  assert.match(g.canPlace('build:command', 9, 9), /terrain/);
+  assert.equal(g.canBuild('command'), null, 'palette cards without coordinates only check the type');
+});
+test('T02: no crowd attack reaches aerial units', () => {
+  const g = new CityGame(5);
+  for (const type of ['command', 'academy', 'workshop', 'depot', 'lab']) build(g, type);
+  g.upgradeService(g.service('lab').id);
+  step(g, 6.1);
+  const heliId = g.place('helicopter', 9, 9);
+  const heli = g.units.find(u => u.id === heliId);
+  const droneId = g.place('drone', 15, 9);
+  const drone = g.units.find(u => u.id === droneId);
+  for (const [type, at] of [
+    ['saboteur', heli],
+    ['slinger', drone],
+    ['walker', heli],
+  ]) {
+    g.spawn({ gate: 0, release: 0, group: 1 });
+    Object.assign(g.crowd.at(-1), { type, state: 'march', x: at.x, y: at.y, lastSkill: 0, target: 3 });
+  }
+  const before = [heli.hp, drone.hp];
+  g.updateCrowd(0.05);
+  assert.deepEqual([heli.hp, drone.hp], before);
+  const patrolId = g.place('patrol', 3, 9);
+  const patrol = g.units.find(u => u.id === patrolId);
+  g.spawn({ gate: 0, release: 0, group: 1 });
+  Object.assign(g.crowd.at(-1), { type: 'saboteur', state: 'march', x: 3, y: 9.5, lastSkill: 0, target: 3 });
+  const hp = patrol.hp;
+  g.updateCrowd(0.05);
+  assert.ok(patrol.hp <= hp - 18, 'ground units remain sabotage targets');
+});
+test('T03: a spawn refused by the crowd cap stays pending instead of being counted', () => {
+  const g = new CityGame();
+  build(g, 'command');
+  g.startWave();
+  const total = g.rallies.reduce((n, r) => n + r.count, 0);
+  const filler = Array.from({ length: 420 }, (_, i) => ({ id: -i, state: 'gone' }));
+  g.crowd.push(...filler);
+  assert.equal(g.spawn(g.rallies[0]), false);
+  g.crowd.length = 0;
+  for (let i = 0; i < 30 * 600 && g.phase === 'wave'; i++) {
+    g.update(1 / 30);
+    // Saturate for the first ten seconds: nobody may appear, nobody may be lost.
+    if (g.time < 10) {
+      g.crowd = g.crowd.filter(p => p.state !== 'gone').concat(filler.slice(g.crowd.length));
+      assert.equal(
+        g.rallies.reduce((n, r) => n + r.spawned, 0),
+        0
+      );
+    } else if (g.crowd[0]?.id <= 0) g.crowd = g.crowd.filter(p => p.id > 0);
+  }
+  assert.equal(
+    g.rallies.reduce((n, r) => n + r.spawned, 0),
+    total
+  );
+});
+test('T08: every debit is reflected in stats.spent', () => {
+  const g = new CityGame(5);
+  const start = g.money;
+  base(g);
+  g.place('patrol', 3, 9);
+  g.place('barrier', 9, 5);
+  g.reinforce(3);
+  g.damageBuilding(g.primary, 300);
+  g.repairArmor(3);
+  g.queueRepair(3);
+  g.upgradeService(g.service('academy').id);
+  g.upgradeBarrier(g.barriers[0].id);
+  g.units[0].hp = 10;
+  g.repair('unit', g.units[0].id);
+  g.upgradeUnit(g.units[0].id);
+  assert.equal(g.stats.spent, start - g.money);
+});

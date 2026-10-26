@@ -28,6 +28,9 @@ export class Rng {
     return a[Math.floor(this.next() * a.length)];
   }
 }
+const NO_PLOT = 'Touchez un terrain marqué + pour bâtir ce service.';
+/** Drones and helicopters fly: no crowd attack (contact, stones, sabotage) can reach them. */
+export const airborne = u => u.type === 'drone' || u.type === 'helicopter';
 const neighbors = p =>
   [
     { x: p.x + 1, y: p.y },
@@ -165,8 +168,15 @@ export class CityGame {
     }
     return p.map(v => ({ ...v }));
   }
+  /** Every debit goes through here so stats.spent always matches the money actually paid. */
+  spend(amount) {
+    if (this.money < amount) return false;
+    this.money -= amount;
+    this.stats.spent += amount;
+    return true;
+  }
   canPlace(type, x, y) {
-    if (type?.startsWith('build:')) return this.canBuild(type.slice(6));
+    if (type?.startsWith('build:')) return this.canBuild(type.slice(6), x, y);
     const d = EQUIPMENT[type];
     x = Math.round(x);
     y = Math.round(y);
@@ -196,8 +206,7 @@ export class CityGame {
       return null;
     }
     const d = EQUIPMENT[type];
-    this.money -= d.cost;
-    this.stats.spent += d.cost;
+    this.spend(d.cost);
     const id = this.nextId++;
     if (d.unit) {
       this.units.push({
@@ -241,9 +250,7 @@ export class CityGame {
     const u = this.units.find(u => u.id === id && u.hp > 0);
     if (!u || u.tier >= 3 || (this.service(serviceFor(u.type))?.tier ?? 0) < u.tier + 1) return false;
     const price = Math.round(EQUIPMENT[u.type].cost * 0.65);
-    if (this.money < price) return false;
-    this.money -= price;
-    this.stats.spent += price;
+    if (!this.spend(price)) return false;
     u.tier++;
     u.maxHp = Math.round(u.maxHp * 1.25);
     u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.35);
@@ -261,9 +268,7 @@ export class CityGame {
     const b = this.targets.find(b => b.id === id);
     if (this.fortificationIssue(b)) return false;
     const price = 55 + (b.protection ?? 0) * 30;
-    if (this.money < price) return false;
-    this.money -= price;
-    this.stats.spent += price;
+    if (!this.spend(price)) return false;
     b.protection = (b.protection ?? 0) + 1;
     b.armorMax = ARMOR[b.protection];
     b.armorHp = b.armorMax;
@@ -272,8 +277,7 @@ export class CityGame {
   }
   repairArmor(id) {
     const b = this.targets.find(b => b.id === id);
-    if (!b || !b.armorMax || b.armorHp >= b.armorMax || this.money < 30) return false;
-    this.money -= 30;
+    if (!b || !b.armorMax || b.armorHp >= b.armorMax || !this.spend(30)) return false;
     b.armorHp = Math.min(b.armorMax, b.armorHp + 160);
     this.fx('heal', b.x, b.y, '#f2d397', 1.2);
     return true;
@@ -310,8 +314,7 @@ export class CityGame {
   repair(type, id) {
     const list = type === 'unit' ? this.units : this.barriers,
       u = list.find(v => v.id === id);
-    if (!u || u.hp <= 0 || u.hp >= u.maxHp || this.money < 30) return false;
-    this.money -= 30;
+    if (!u || u.hp <= 0 || u.hp >= u.maxHp || !this.spend(30)) return false;
     u.hp = Math.min(u.maxHp, u.hp + 100);
     this.fx('heal', u.x, u.y, '#a9dfc2', 1);
     return true;
@@ -322,7 +325,7 @@ export class CityGame {
     y = Math.round(y);
     if (!u || !road(x, y)) return false;
     u.goal = { x, y };
-    u.path = ['drone', 'helicopter'].includes(u.type) ? [{ x, y }] : this.path(u, u.goal, u.type === 'water');
+    u.path = airborne(u) ? [{ x, y }] : this.path(u, u.goal, u.type === 'water');
     u.pathVersion = this.version;
     this.fx('order', x, y, '#97ceef', 0.8);
     return true;
@@ -398,8 +401,9 @@ export class CityGame {
       .sort((a, b) => a.s - b.s);
     return scored[0]?.b.id ?? 3;
   }
+  /** Returns false when the crowd cap refuses the spawn, so the caller keeps that person pending. */
   spawn(r) {
-    if (this.crowd.length >= 420) return;
+    if (this.crowd.length >= 420) return false;
     const g = GATES[r.gate],
       type = this.rng.pick(this.def.types),
       d = CROWD[type],
@@ -428,6 +432,7 @@ export class CityGame {
       lastSkill: this.time + 10 + this.rng.next() * 8,
     };
     this.crowd.push(p);
+    return true;
   }
   push(p, source, amount) {
     const dx = p.x - source.x,
@@ -606,9 +611,7 @@ export class CityGame {
         p.path = this.path(p, b.access);
         p.pathVersion = this.version;
       }
-      const closeUnit = this.units.find(
-        u => u.hp > 0 && !['drone', 'helicopter'].includes(u.type) && dist(u, p) < 1.05
-      );
+      const closeUnit = this.units.find(u => u.hp > 0 && !airborne(u) && dist(u, p) < 1.05);
       if (closeUnit) {
         closeUnit.hp -=
           CROWD[p.type].damage * (1 + (p.tier - 1) * 0.12) * dt * (closeUnit.type === 'shield' ? 0.35 : 1);
@@ -616,9 +619,7 @@ export class CityGame {
         this.strike(p, closeUnit, 'shield');
       }
       if (p.type === 'slinger' && this.time >= p.lastSkill) {
-        const u = this.units.find(
-          u => u.hp > 0 && !['drone', 'helicopter'].includes(u.type) && dist(u, p) < 3.2
-        );
+        const u = this.units.find(u => u.hp > 0 && !airborne(u) && dist(u, p) < 3.2);
         if (u) {
           p.attackUntil = this.time + 0.5;
           p.attackTarget = { x: u.x, y: u.y };
@@ -655,7 +656,7 @@ export class CityGame {
         }
       }
       if (p.type === 'saboteur' && this.time >= p.lastSkill) {
-        const u = this.units.find(u => u.hp > 0 && dist(u, p) < 2);
+        const u = this.units.find(u => u.hp > 0 && !airborne(u) && dist(u, p) < 2);
         if (u) {
           u.hp -= 18;
           this.fx('shock', u.x, u.y, '#e7af95', 1.1);
@@ -742,7 +743,10 @@ export class CityGame {
         if (this.time >= r.start && r.spawned < r.count) {
           r.clock = (r.clock ?? 0) + dt;
           while (r.clock > 0.13 && r.spawned < r.count) {
-            this.spawn(r);
+            if (!this.spawn(r)) {
+              r.clock = 0.13;
+              break;
+            }
             r.spawned++;
             r.clock -= 0.13;
           }
@@ -776,7 +780,15 @@ export class CityGame {
     this.crowd = this.crowd.filter(p => p.state !== 'gone');
     this.units = this.units.filter(u => u.hp > 0);
   }
-  canBuild(type) {
+  /** Nearest free plot within reach of (x, y): the same lookup for the hover preview and the actual build. */
+  buildPlot(x, y) {
+    const plot = this.services
+      .filter(s => ['empty', 'ruin'].includes(s.state))
+      .sort((a, b) => dist(a, { x, y }) - dist(b, { x, y }))[0];
+    return plot && dist(plot, { x, y }) <= 2.2 ? plot : null;
+  }
+  /** Without coordinates, only the type is checked (palette cards); with them, the plot is checked too. */
+  canBuild(type, x, y) {
     const d = SERVICES[type];
     if (!d || !['prepare', 'wave', 'interval'].includes(this.phase)) return 'Construction indisponible';
     if (this.services.some(s => s.type === type && ['built', 'building'].includes(s.state)))
@@ -784,23 +796,17 @@ export class CityGame {
     const missing = d.requires.find(t => !this.service(t));
     if (missing) return `Requis : ${SERVICES[missing].name}`;
     if (this.money < d.cost) return 'Budget insuffisant';
+    if (x !== undefined && !this.buildPlot(x, y)) return NO_PLOT;
     return null;
   }
   buildService(type, x, y) {
-    const issue = this.canBuild(type);
+    const issue = this.canBuild(type, x ?? NaN, y ?? NaN);
     if (issue) {
       this.emit('toast', { text: issue });
       return null;
     }
-    const plot = this.services
-      .filter(s => ['empty', 'ruin'].includes(s.state))
-      .sort((a, b) => dist(a, { x, y }) - dist(b, { x, y }))[0];
-    if (!plot || dist(plot, { x, y }) > 2.2) {
-      this.emit('toast', { text: 'Touchez un terrain marqué + pour bâtir ce service.' });
-      return null;
-    }
-    this.money -= SERVICES[type].cost;
-    this.stats.spent += SERVICES[type].cost;
+    const plot = this.buildPlot(x, y);
+    this.spend(SERVICES[type].cost);
     Object.assign(plot, {
       type,
       state: 'building',
@@ -821,8 +827,7 @@ export class CityGame {
     const s = this.services.find(s => s.id === id && s.state === 'built');
     if (!s || s.tier >= 3 || s.upgrading) return false;
     const cost = 80 + s.tier * 40;
-    if (this.money < cost) return false;
-    this.money -= cost;
+    if (!this.spend(cost)) return false;
     s.upgrading = 6;
     return true;
   }
@@ -831,8 +836,7 @@ export class CityGame {
       work = this.service('workshop');
     if (!b || !work || (b.tier ?? 1) >= 3 || (b.tier ?? 1) > work.tier) return false;
     const cost = 30 + (b.tier ?? 1) * 20;
-    if (this.money < cost) return false;
-    this.money -= cost;
+    if (!this.spend(cost)) return false;
     b.tier = (b.tier ?? 1) + 1;
     b.maxHp = 180 + (b.tier - 1) * 170;
     b.hp = b.maxHp;
@@ -851,8 +855,7 @@ export class CityGame {
     )
       return false;
     const cost = b.hp <= 0 ? 90 : 50;
-    if (this.money < cost) return false;
-    this.money -= cost;
+    if (!this.spend(cost)) return false;
     this.repairJobs.push({
       id,
       remaining: b.hp <= 0 ? 12 : 8,
@@ -916,7 +919,7 @@ export class CityGame {
     const clinic = this.service('clinic');
     if (clinic)
       for (const u of this.units)
-        if (dist(u, clinic.access) < 4 && u.hp > 0 && !['drone', 'helicopter'].includes(u.type)) {
+        if (dist(u, clinic.access) < 4 && u.hp > 0 && !airborne(u)) {
           u.hp = Math.min(u.maxHp, u.hp + (this.phase === 'wave' ? 2 : 4) * clinic.tier * dt);
           u.healUntil = this.time + 0.1;
         }

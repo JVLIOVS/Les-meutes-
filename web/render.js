@@ -846,8 +846,15 @@ export class CityRenderer {
       const d = EQUIPMENT[this.tool] ?? SERVICES[this.tool?.slice(6)] ?? {},
         x = Math.round(this.hover.x),
         y = Math.round(this.hover.y),
-        valid = !game.canPlace(this.tool, x, y);
-      if (x >= EDGE_MIN && y >= EDGE_MIN && x <= EDGE_MAX && y <= EDGE_MAX) {
+        building = this.tool.startsWith('build:'),
+        // Construction snaps to the nearest free plot from the raw pointer, exactly as the click does.
+        valid = building
+          ? !game.canPlace(this.tool, this.hover.x, this.hover.y)
+          : !game.canPlace(this.tool, x, y),
+        plot = building && valid ? game.buildPlot(this.hover.x, this.hover.y) : null;
+      if (plot) {
+        this.tileShape(plot.x, plot.y, 3.1, 3.1, 0.06, '#a9e4c333', '#a9e4c3');
+      } else if (x >= EDGE_MIN && y >= EDGE_MIN && x <= EDGE_MAX && y <= EDGE_MAX) {
         const color = valid ? '#a9e4c3' : '#ec9e98';
         this.tileShape(x, y, 0.95, 0.95, 0.06, valid ? '#a9e4c333' : '#ec9e9833', color);
         if (d.range) this.ring(x, y, d.range, color, 0.35);

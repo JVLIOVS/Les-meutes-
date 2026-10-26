@@ -65,6 +65,18 @@ Campagne, XP, étoiles, préférences et mission sont enregistrés sur l'apparei
 
 ## Développement
 
+Node ≥ 20 (`.nvmrc`). `npm ci` installe uniquement Prettier.
+
+```sh
+npm test            # règles et audio, Node seul
+npm run format      # Prettier (format:check en CI)
+npm run build       # web/ → dist/, révision ?v= tirée de REVISION (web/data.js)
+python3 -m http.server 8000 --directory dist
+```
+
+Ne pas éditer `dist/`. Ne pas ouvrir `index.html` en `file://` (modules ES).
+
+
 - `npm test` : tests Node déterministes, incluant départ à un seul palais, construction, revenus, soins, soutien aérien, fortifications, dégâts et poses, sauvegarde, migration, entrée réelle dans le palais et victoire sur les trois premières vagues.
 - `npm run build` : export statique vers `dist/`, avec révision des imports et du CSS.
 - `web/sim.js` : règles et sauvegarde ; `web/render.js` : rendu, terrain mis en cache, animations et intérieur ; `web/audio.js` : partition synthétique ; `web/app.js` : interface et campagne.

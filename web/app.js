@@ -1,4 +1,4 @@
-import { DISTRICTS, EQUIPMENT, clamp, road, SERVICES, serviceFor, FORTIFICATIONS } from './data.js';
+import { DISTRICTS, EQUIPMENT, clamp, road, SERVICES, serviceFor, FORTIFICATIONS, REVISION } from './data.js';
 import { CityGame } from './sim.js';
 import { CityRenderer } from './render.js';
 import { icon } from './icons.js';
@@ -6,6 +6,7 @@ import { AudioFx } from './audio.js';
 const $ = id => document.getElementById(id),
   STORE = 'emmet.city.v1';
 document.querySelectorAll('[data-icon]').forEach(el => (el.innerHTML = icon(el.dataset.icon)));
+document.getElementById('build-label').textContent = `PROTOTYPE ${REVISION} · FONDATIONS`;
 const fresh = () => ({
   v: 1,
   completed: [0, 0, 0, 0, 0, 0],
@@ -220,7 +221,7 @@ function updateDescription() {
 }
 function updateHud() {
   if (!game) return;
-  $('district-name').textContent = 'V03 · ' + DISTRICTS[game.level].name;
+  $('district-name').textContent = 'V' + REVISION + ' · ' + DISTRICTS[game.level].name;
   $('district-name').title = DISTRICTS[game.level].objective;
   document.body.classList.toggle('breach-mode', game.phase === 'breach');
   $('phase').textContent =
@@ -499,7 +500,7 @@ function result() {
   const won = game.phase === 'won',
     next = game.level < 5;
   showOverlay(
-    `<p class="eyebrow">${game.def.name.toUpperCase()} · BILAN</p><h2>${won ? 'Le quartier tient.' : 'Le périmètre a cédé.'}</h2><div class="result-stars">${Array.from({ length: 3 }, (_, i) => `<span style="opacity:${i < game.stars ? 1 : 0.15}">${icon('star')}</span>`).join('')}</div><p>${game.reason}</p><div class="result-stats"><div><b>${Math.round(game.integrity)}%</b><span>VILLE PRÉSERVÉE</span></div><div><b>${game.stats.dispersed}</b><span>DISPERSIONS</span></div><div><b>${Math.round(game.trust)}%</b><span>CONFIANCE</span></div></div><p>${won ? `+${xp} XP · ${next ? 'Le quartier suivant est accessible.' : 'Les six quartiers ont tenu.'}` : 'Répartissez vos équipes entre les artères et renforcez les façades exposées.'}</p><div class="overlay-actions"><button class="primary" id="result-next">${won && next ? 'QUARTIER SUIVANT' : 'REJOUER'} ${icon('arrow')}</button><button class="secondary" id="result-home">CAMPAGNE</button></div>`,
+    `<p class="eyebrow">${game.def.name.toUpperCase()} · BILAN</p><h2>${won ? 'Le quartier tient.' : 'Le périmètre a cédé.'}</h2><div class="result-stars">${Array.from({ length: 3 }, (_, i) => `<span style="opacity:${i < game.stars ? 1 : 0.15}">${icon('star')}</span>`).join('')}</div><p>${game.reason}</p><div class="result-stats"><div><b>${Math.round(game.integrity)}%</b><span>PALAIS PRÉSERVÉ</span></div><div><b>${game.stats.dispersed}</b><span>DISPERSIONS</span></div><div><b>${Math.round(game.trust)}%</b><span>CONFIANCE</span></div></div><p>${won ? `+${xp} XP · ${next ? 'Le quartier suivant est accessible.' : 'Les six quartiers ont tenu.'}` : 'Répartissez vos équipes entre les artères et renforcez les façades exposées.'}</p><div class="overlay-actions"><button class="primary" id="result-next">${won && next ? 'QUARTIER SUIVANT' : 'REJOUER'} ${icon('arrow')}</button><button class="secondary" id="result-home">CAMPAGNE</button></div>`,
     card => {
       card.querySelector('#result-next').onclick = () => start(won && next ? game.level + 1 : game.level);
       card.querySelector('#result-home').onclick = home;

@@ -1,3 +1,5 @@
+/** Single source for the displayed revision and the build's cache-busting query. */
+export const REVISION = '03.1';
 export const SIZE = 19;
 export const EDGE_MIN = -7,
   EDGE_MAX = 25,
@@ -15,7 +17,6 @@ export const DISTRICTS = [
     objective: 'Un palais. Tout le reste est à bâtir : commandement, logements, commerces et protections.',
     types: ['walker', 'runner'],
     entrances: [0, 1],
-    primary: 'PALAIS D’AZUR',
     xp: 100,
   },
   {
@@ -27,10 +28,9 @@ export const DISTRICTS = [
     waves: 4,
     base: 30,
     budget: 1110,
-    objective: 'Protégez les commerces. La foule arrive de trois artères.',
+    objective: 'Vos commerces, une fois bâtis, deviennent des cibles. La foule arrive par trois artères.',
     types: ['walker', 'runner', 'heavy'],
     entrances: [0, 1, 2],
-    primary: 'HALLES DES ARCADES',
     xp: 140,
   },
   {
@@ -45,7 +45,6 @@ export const DISTRICTS = [
     objective: 'Les attroupements se divisent. Coupez les accès sans vous enfermer.',
     types: ['walker', 'runner', 'heavy', 'builder'],
     entrances: [0, 1, 2, 3],
-    primary: 'GALERIES DU CANAL',
     xp: 180,
   },
   {
@@ -57,10 +56,9 @@ export const DISTRICTS = [
     waves: 5,
     base: 42,
     budget: 1330,
-    objective: 'Défendez la maison civique et ses rues. Gardez la confiance de la ville.',
+    objective: 'Des lanceurs visent vos équipes à distance. Gardez la confiance de la ville.',
     types: ['walker', 'runner', 'heavy', 'builder', 'slinger'],
     entrances: [0, 1, 2, 3],
-    primary: 'MAISON CIVIQUE',
     xp: 220,
   },
   {
@@ -75,7 +73,6 @@ export const DISTRICTS = [
     objective: 'Vos renforts peuvent être isolés par des obstacles adverses.',
     types: ['walker', 'runner', 'heavy', 'builder', 'slinger', 'saboteur'],
     entrances: [0, 1, 2, 3],
-    primary: 'CENTRE DE SECOURS',
     xp: 270,
   },
   {
@@ -87,10 +84,9 @@ export const DISTRICTS = [
     waves: 6,
     base: 60,
     budget: 1550,
-    objective: 'Protégez le palais et les quartiers alentour. Plusieurs rassemblements convergent.',
+    objective: 'Protégez le palais et vos services. Plusieurs rassemblements convergent.',
     types: ['walker', 'runner', 'heavy', 'builder', 'slinger', 'saboteur'],
     entrances: [0, 1, 2, 3],
-    primary: 'PALAIS D’AZUR',
     xp: 350,
   },
 ];
