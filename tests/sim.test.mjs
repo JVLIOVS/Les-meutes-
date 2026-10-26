@@ -52,7 +52,7 @@ test('all nine constructible types have a purpose, and housing, trade and mediat
   for (const type of Object.keys(SERVICES)) build(g, type);
   assert.equal(g.services.filter(s => s.state === 'built').length, 9);
   g.wave = 1;
-  assert.equal(g.waveReward(), 175);
+  assert.equal(g.waveReward(), 190);
   assert.equal(g.income(), INCOME.housing + INCOME.market + INCOME.civic);
   for (const s of g.services) assert.ok(SERVICES[s.type].desc.length > 20);
 });
@@ -473,4 +473,109 @@ test('T08: every debit is reflected in stats.spent', () => {
   g.repair('unit', g.units[0].id);
   g.upgradeUnit(g.units[0].id);
   assert.equal(g.stats.spent, start - g.money);
+});
+
+// V05 — arrests, vans and the new tactical kit.
+const marcher = (g, x, y, extra = {}) => {
+  g.spawn({ gate: 0, release: 0, group: 1, target: 3 });
+  return Object.assign(g.crowd.at(-1), { state: 'march', x, y, ...extra });
+};
+test('a person subdued by a patrol is arrested, collected by a van and paid for on delivery', () => {
+  const g = funded();
+  build(g, 'command');
+  g.startWave();
+  g.rallies = [];
+  const ids = [9, 10, 11].map(x => marcher(g, x, 15, { hp: 1 }).id);
+  for (const id of ids)
+    g.hit(
+      g.crowd.find(p => p.id === id),
+      5,
+      { type: 'patrol' }
+    );
+  assert.ok(g.crowd.filter(p => p.state === 'held').length === 3);
+  const money = g.money;
+  g.updateArrests(1 / 30);
+  assert.equal(g.vans.length, 1, 'three people waiting call a van');
+  let sawLoading = false;
+  for (let i = 0; i < 30 * 60 && (g.vans.length || !sawLoading); i++) {
+    g.updateArrests(1 / 30);
+    g.updateCrowd(1 / 30);
+    sawLoading ||= g.vans[0]?.state === 'load';
+  }
+  assert.ok(sawLoading);
+  assert.equal(g.stats.arrested, 3);
+  assert.equal(g.money, money + 12);
+  assert.ok(
+    g.crowd.filter(p => ids.includes(p.id)).every(p => p.state === 'gone'),
+    'they left the map in the van'
+  );
+});
+test('water and mediation disperse; a drone mark turns a dispersal into an arrest', () => {
+  const g = funded();
+  build(g, 'command');
+  g.startWave();
+  const a = marcher(g, 9, 15, { hp: 1 }),
+    b = marcher(g, 9, 14, { hp: 1, marked: true });
+  g.hit(a, 5, { type: 'water' });
+  g.hit(b, 5, { type: 'water' });
+  assert.equal(a.state, 'leave');
+  assert.equal(b.state, 'held');
+});
+test('held people nobody collects get up after 30 s; arrests never count as an active crowd', () => {
+  const g = new CityGame();
+  build(g, 'command');
+  g.startWave();
+  g.rallies = [];
+  const p = marcher(g, 9, 15, { hp: 1 });
+  g.hit(p, 5, { type: 'shield' });
+  assert.equal(g.activeCrowd, 0);
+  p.van = 999; // pretend a van is on its way, then let it vanish
+  g.vans = [];
+  p.van = null;
+  g.time += 31;
+  g.updateCrowd(1 / 30);
+  assert.equal(p.state, 'leave');
+});
+test('a smoke screen closes a street in the flow field until it clears', () => {
+  const g = funded();
+  for (const t of ['command', 'workshop', 'depot']) build(g, t);
+  const before = g.path({ x: 3, y: 3 }, { x: 9, y: 3 });
+  assert.ok(g.place('smoke', 6, 3));
+  const during = g.path({ x: 3, y: 3 }, { x: 9, y: 3 });
+  assert.ok(during.length > before.length && !during.some(p => p.x === 6 && p.y === 3));
+  step(g, 20.2);
+  assert.equal(g.path({ x: 3, y: 3 }, { x: 9, y: 3 }).length, before.length);
+});
+test('the sound truck lures nearby groups away from their target, then expires', () => {
+  const g = funded();
+  for (const t of ['command', 'civic']) build(g, t);
+  g.startWave();
+  g.rallies = [];
+  const near = marcher(g, 9, 10),
+    far = marcher(g, 3, -5);
+  const id = g.place('decoy', 9, 13);
+  assert.equal(near.target, id);
+  assert.equal(far.target, 3);
+  assert.ok(g.targets.some(t => t.id === id));
+  const trust = g.trust;
+  g.damageBuilding(g.decoys[0], 999);
+  assert.equal(g.trust, trust, 'losing a decoy costs no trust');
+  g.update(1 / 30);
+  assert.equal(g.decoys.length, 0);
+});
+test('the helicopter spotlight blocks crowd skills and it drops a net on the densest spot', () => {
+  const g = funded(5);
+  for (const t of ['command', 'academy', 'workshop', 'depot', 'lab']) build(g, t);
+  g.upgradeService(g.service('lab').id);
+  step(g, 6.1);
+  g.place('helicopter', 9, 9);
+  g.startWave();
+  g.rallies = [];
+  const s = marcher(g, 9.2, 9.1, { type: 'saboteur', lastSkill: 0 });
+  marcher(g, 9.1, 9.2);
+  const nets = g.fields.length;
+  g.updateUnits(0.05);
+  assert.ok(s.exposed > g.time);
+  assert.equal(g.fields.length, nets + 1);
+  assert.equal(g.fields.at(-1).type, 'net');
 });

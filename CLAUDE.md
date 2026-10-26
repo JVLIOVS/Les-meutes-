@@ -20,6 +20,8 @@ Jeu solo web de construction + défense urbaine par vagues, en français. JS nat
 - Mission témoin (quartier 0) : 320 crédits ; `lines` et `fortress` gagnent, `passive` perd (3 graines).
 - Pas de revenu pendant la préparation (sinon attendre devient une stratégie).
 - Aucune attaque de foule ne touche drone/hélico (`airborne`).
+- Contact sol ou marque drone = interpellation (`held`) → fourgons (`updateArrests`), +4/personne livrée. Eau/médiation/filets = dispersion sans prime. Les `held` ne comptent jamais comme foule active.
+- Fumigène et barrages passent par la carte de flux : tout ce qui ferme une rue doit appeler `clearRoutes()`.
 - Une vague ne finit jamais par minuterie ; aucun gel (test de fumée sur les 6 quartiers).
 - Prise du palais : 4,8 s, foule réellement à l'intérieur, sans violence graphique. Pays et dirigeant fictifs, pas d'arme létale.
 - Sauvegardes : rester compatible schéma 1–3 (champs nouveaux avec valeurs par défaut).

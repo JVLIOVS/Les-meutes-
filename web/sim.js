@@ -194,12 +194,19 @@ export class CityGame {
       barricades: 0,
       gateDamage: [0, 0, 0, 0],
       lost: [],
+      arrested: 0,
     };
+    this.vans = [];
+    this.decoys = [];
     this.selected = null;
     this.reason = '';
   }
   get targets() {
-    return [...this.buildings, ...this.services.filter(b => b.state === 'built')];
+    return [
+      ...this.buildings,
+      ...this.services.filter(b => b.state === 'built'),
+      ...this.decoys.filter(d => d.hp > 0),
+    ];
   }
   service(type) {
     return this.services.find(s => s.type === type && s.state === 'built' && s.hp > 0);
@@ -210,7 +217,7 @@ export class CityGame {
     );
   }
   waveReward() {
-    return 150 + this.wave * 25;
+    return 150 + this.wave * 40;
   }
   /** Credits per second from living services (paid during waves and lulls only). */
   income() {
@@ -252,7 +259,8 @@ export class CityGame {
     const k = key(to.x, to.y) + ':' + vehicle;
     let field = this.routeCache.get(k);
     if (!field) {
-      field = flowField(to, this.barriers, this.hostile, vehicle);
+      const smoke = this.fields.filter(f => f.type === 'smoke').map(f => ({ x: f.x, y: f.y, hp: 1 }));
+      field = flowField(to, [...this.barriers, ...smoke], this.hostile, vehicle);
       this.routeCache.set(k, field);
     }
     return descend(field, from);
@@ -319,7 +327,28 @@ export class CityGame {
       this.stats.barricades++;
       this.clearRoutes();
     } else if (type === 'net') this.fields.push({ id, type, x, y, radius: d.range, until: this.time + 28 });
-    else if (type === 'impulse') {
+    else if (type === 'smoke') {
+      this.fields.push({ id, type, x, y, radius: d.range, until: this.time + 20 });
+      this.clearRoutes();
+    } else if (type === 'decoy') {
+      const decoy = {
+        id,
+        x,
+        y,
+        access: { x, y },
+        hp: d.hp,
+        maxHp: d.hp,
+        name: 'CAMION SONO',
+        decoy: true,
+        until: this.time + 30,
+      };
+      this.decoys.push(decoy);
+      for (const p of this.crowd)
+        if (p.state === 'march' && dist(p, decoy) < d.range) {
+          p.target = id;
+          p.pathVersion = -1;
+        }
+    } else if (type === 'impulse') {
       this.nextImpulse = this.time + 8;
       for (const p of this.crowd)
         if (p.state === 'march' && dist(p, { x, y }) < d.range) {
@@ -385,6 +414,10 @@ export class CityGame {
     }
     b.hp = Math.max(0, b.hp - amount);
     this.stats.damage += amount;
+    if (b.hp === 0 && b.decoy) {
+      this.fx('shatter', b.x, b.y, '#f0b6d0', 1.4);
+      return;
+    }
     if (b.hp === 0) {
       (this.stats.lost ??= []).push(b.name ?? SERVICES[b.type]?.short);
       if (b.state) b.state = 'ruin';
@@ -555,10 +588,16 @@ export class CityGame {
     p.hp -= power;
     p.flash = 0.12;
     if (p.hp <= 0 && p.state === 'march') {
+      this.stats.dispersed++;
+      // Ground police contact (or a drone mark) means an arrest: the person sits and waits for a van.
+      if (p.marked || u?.type === 'patrol' || u?.type === 'shield') {
+        Object.assign(p, { state: 'held', heldAt: this.time, path: [], van: null, moving: false });
+        this.fx('disperse', p.x, p.y, '#9fc7ef', 0.5);
+        return;
+      }
       p.state = 'leave';
       p.path = this.path(p, GATES[p.gate]);
       p.pathVersion = this.version;
-      this.stats.dispersed++;
       if (this.force) this.trust -= 0.35;
       this.fx('disperse', p.x, p.y, u?.type === 'mediation' ? '#b3e5bb' : '#aadbef', 0.6);
     }
@@ -601,16 +640,7 @@ export class CityGame {
         this.time > (u.nextOrder ?? 0)
       ) {
         u.nextOrder = this.time + 1.5;
-        const q =
-          u.type === 'helicopter'
-            ? near.reduce(
-                (best, p) =>
-                  near.filter(v => dist(v, p) < 2).length > near.filter(v => dist(v, best) < 2).length
-                    ? p
-                    : best,
-                near[0]
-              )
-            : near[0];
+        const q = u.type === 'helicopter' ? this.densest(near) : near[0];
         if (dist(q, u) > d.range * 0.7) this.moveUnit(u.id, Math.round(q.x), Math.round(q.y));
       }
       if (u.path.length) {
@@ -651,11 +681,29 @@ export class CityGame {
         }
         if (u.type === 'helicopter') {
           p.slow = Math.max(p.slow ?? 0, 0.35);
+          p.exposed = this.time + 0.6;
           if (u.cooldown <= 0) this.push(p, u, 0.24);
         }
-        if (u.type === 'drone') p.stun = Math.max(p.stun, 0.12);
+        if (u.type === 'drone') {
+          p.stun = Math.max(p.stun, 0.12);
+          p.marked = true;
+        }
       }
       if (u.type === 'mediation') this.trust = Math.min(100, this.trust + 0.18 * dt);
+      if (u.type === 'helicopter' && this.time >= (u.nextDrop ?? 0)) {
+        const at = this.densest(targets);
+        u.nextDrop = this.time + 10;
+        this.fields.push({
+          id: this.nextId++,
+          type: 'net',
+          x: at.x,
+          y: at.y,
+          radius: 1.5,
+          until: this.time + 10,
+        });
+        this.fx('airnet', at.x, at.y, '#e7d393', 2.4);
+        this.emit('impact', { kind: 'helicopter' });
+      }
       if (u.cooldown <= 0) {
         const p = targets[0];
         u.target = { x: p.x, y: p.y, until: this.time + 0.32 };
@@ -682,6 +730,90 @@ export class CityGame {
       }
     }
   }
+  /** Centre of the busiest tile among `list`, in one pass (was a quadratic neighbour count). */
+  densest(list) {
+    const counts = new Map();
+    let best = list[0],
+      top = 0;
+    for (const p of list) {
+      const k = key(p.x, p.y),
+        n = (counts.get(k) ?? 0) + 1;
+      counts.set(k, n);
+      if (n > top) {
+        top = n;
+        best = p;
+      }
+    }
+    return best;
+  }
+  /**
+   * Vans leave the command post, collect up to six held people close together, and drive back.
+   * Each delivered person is worth 4 credits: arrests feed the treasury, dispersals do not.
+   */
+  updateArrests(dt) {
+    const base = this.service('command')?.access ?? GATES[0],
+      capacity = 1 + (this.service('command')?.tier ?? 0),
+      waiting = this.crowd.filter(p => p.state === 'held' && !p.van);
+    if (waiting.length && this.vans.length < capacity) {
+      const first = waiting.reduce((a, b) => (a.heldAt < b.heldAt ? a : b));
+      if (waiting.length >= 3 || this.time - first.heldAt > 6) {
+        const load = waiting.filter(p => dist(p, first) < 2.5).slice(0, 6),
+          stop = { x: Math.round(first.x), y: Math.round(first.y) },
+          van = {
+            id: this.nextId++,
+            x: base.x,
+            y: base.y,
+            state: 'go',
+            stop,
+            cargo: 0,
+            load: load.map(p => p.id),
+            heading: 0,
+            wait: 0,
+          };
+        van.path = this.path(van, stop, true);
+        for (const p of load) p.van = van.id;
+        this.vans.push(van);
+      }
+    }
+    for (const van of this.vans) {
+      van.moving = false;
+      if (van.state === 'go' || van.state === 'back') {
+        const next = van.path[0];
+        if (!next) {
+          if (van.state === 'back') {
+            this.money += van.cargo * 4;
+            this.stats.arrested = (this.stats.arrested ?? 0) + van.cargo;
+            if (van.cargo) this.fx('deploy', van.x, van.y, '#9fc7ef', 0.9);
+            van.state = 'done';
+          } else {
+            van.state = 'load';
+            for (const p of this.crowd)
+              if (van.load.includes(p.id) && p.state === 'held') p.state = 'boarding';
+          }
+          continue;
+        }
+        const d = dist(van, next),
+          step = Math.min(d, 3.2 * dt);
+        if (d < 0.05) {
+          van.path.shift();
+          continue;
+        }
+        van.heading = Math.atan2(next.y - van.y, next.x - van.x);
+        van.x += ((next.x - van.x) / d) * step;
+        van.y += ((next.y - van.y) / d) * step;
+        van.moving = true;
+      } else if (van.state === 'load') {
+        van.wait += dt;
+        const pending = this.crowd.some(p => p.van === van.id && ['held', 'boarding'].includes(p.state));
+        if (!pending || van.wait > 6) {
+          for (const p of this.crowd) if (p.van === van.id && p.state !== 'gone') p.van = null;
+          van.state = 'back';
+          van.path = this.path(van, base, true);
+        }
+      }
+    }
+    this.vans = this.vans.filter(v => v.state !== 'done');
+  }
   fxSparingly(kind, x, y, c, size) {
     if (this.rng.next() < 0.04) this.fx(kind, x, y, c, size);
   }
@@ -698,6 +830,34 @@ export class CityGame {
         } else continue;
       }
       if (p.state === 'gone') continue;
+      if (p.state === 'held') {
+        // Nobody came: after 30 s the person gets up and goes home.
+        if (!p.van && this.time - p.heldAt > 30) {
+          p.state = 'leave';
+          p.path = this.path(p, GATES[p.gate]);
+        }
+        continue;
+      }
+      if (p.state === 'boarding') {
+        const van = this.vans.find(v => v.id === p.van);
+        if (!van) {
+          p.state = 'leave';
+          p.path = this.path(p, GATES[p.gate]);
+          continue;
+        }
+        const d = dist(p, van);
+        if (d < 0.25) {
+          p.state = 'gone';
+          van.cargo++;
+          continue;
+        }
+        const step = Math.min(d, 1.5 * dt);
+        p.heading = Math.atan2(van.y - p.y, van.x - p.x);
+        p.x += ((van.x - p.x) / d) * step;
+        p.y += ((van.y - p.y) / d) * step;
+        p.moving = true;
+        continue;
+      }
       if (p.hp <= 0 && p.state === 'march') this.hit(p, 0);
       if (p.state === 'leave') {
         if (!p.path.length) {
@@ -725,7 +885,7 @@ export class CityGame {
         closeUnit.flash = 0.1;
         this.strike(p, closeUnit, 'shield');
       }
-      if (p.type === 'slinger' && this.time >= p.lastSkill) {
+      if (p.type === 'slinger' && this.time >= p.lastSkill && !(p.exposed > this.time)) {
         const u = this.units.find(u => u.hp > 0 && !airborne(u) && dist(u, p) < 3.2);
         if (u) {
           p.attackUntil = this.time + 0.5;
@@ -745,7 +905,12 @@ export class CityGame {
           p.lastSkill = this.time + 3.5;
         }
       }
-      if (p.type === 'builder' && this.time >= p.lastSkill && this.hostile.length < 8) {
+      if (
+        p.type === 'builder' &&
+        this.time >= p.lastSkill &&
+        this.hostile.length < 8 &&
+        !(p.exposed > this.time)
+      ) {
         const x = Math.round(p.x),
           y = Math.round(p.y);
         if (
@@ -762,7 +927,7 @@ export class CityGame {
           p.lastSkill = this.time + Math.max(9, 20 - (p.tier - 1) * 3);
         }
       }
-      if (p.type === 'saboteur' && this.time >= p.lastSkill) {
+      if (p.type === 'saboteur' && this.time >= p.lastSkill && !(p.exposed > this.time)) {
         const u = this.units.find(u => u.hp > 0 && !airborne(u) && dist(u, p) < 2);
         if (u) {
           u.hp -= 18;
@@ -773,8 +938,8 @@ export class CityGame {
       let speed = p.speed * (p.slow > 0 ? 0.45 : 1) * (closeUnit?.type === 'shield' ? 0.22 : 1);
       for (const f of this.fields)
         if (p.state === 'march' && dist(f, p) < f.radius) {
-          speed *= 0.3;
-          this.hit(p, 9 * dt);
+          speed *= f.type === 'smoke' ? 0.5 : 0.3;
+          this.hit(p, (f.type === 'smoke' ? 4 : 9) * dt);
         }
       if (p.state !== 'march') continue;
       if (dist(p, b.access) < 0.72) {
@@ -839,9 +1004,13 @@ export class CityGame {
     this.updateConstruction(dt);
     if (this.phase !== 'prepare') this.money += this.income() * dt;
     this.effects = this.effects.filter(e => this.time - e.born < (e.kind === 'stone' ? 0.7 : 1.1));
+    const smoked = this.fields.some(f => f.type === 'smoke' && f.until <= this.time);
     this.fields = this.fields.filter(f => f.until > this.time);
+    if (smoked) this.clearRoutes();
+    this.decoys = this.decoys.filter(d => d.hp > 0 && d.until > this.time);
     for (const b of [...this.buildings, ...this.services]) b.flash = Math.max(0, (b.flash ?? 0) - dt);
     this.updateUnits(dt);
+    this.updateArrests(dt);
     if (this.phase === 'interval') {
       this.updateCrowd(dt);
       this.countdown -= dt;
@@ -1182,6 +1351,8 @@ export class CityGame {
       'repairJobs',
       'breach',
       'nextRepairFx',
+      'vans',
+      'decoys',
     ];
     const data = { schema: 3, seed: this.rng.seed };
     for (const k of keys) data[k] = structuredClone(this[k]);

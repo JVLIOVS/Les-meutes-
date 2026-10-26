@@ -1,3 +1,19 @@
+# Validation — V05 · Interpellations et nouvel arsenal
+
+26 octobre 2026. 34 tests Node passent.
+
+| Livré | Preuve |
+| --- | --- |
+| Interpellations : une personne maîtrisée au contact (patrouille, boucliers) ou marquée par un drone s'assoit et attend. Dès 3 personnes (ou 6 s d'attente), un fourgon part du commandement, embarque jusqu'à 6 personnes proches et repart. +4 crédits par personne livrée. Fourgons simultanés : 1 + niveau du commandement. Personne ne vient en 30 s → elle repart. | Tests (cycle complet, paiement, abandon). Navigateur : 12 interpellations livrées en une vague, capture `docs/images/v05-interpellations.jpg`. |
+| Eau, médiation, filets : dispersion (la personne rentre chez elle), sans prime | Test. |
+| Fumigène (Logistique, 45) : ferme une rue 20 s dans la carte de flux, la foule contourne | Test : détour pendant, chemin d'origine après. |
+| Camion sono (Médiation, 90) : leurre 30 s qui attire les groupes à 6 cases ; sa destruction ne coûte pas de confiance | Test. |
+| Hélicoptère : projecteur qui neutralise lanceurs, saboteurs et barricadiers ; largue un filet toutes les 10 s sur la plus forte concentration. Recherche de densité en une passe (était quadratique). | Test. |
+| Drone : marque ses cibles (point violet) ; maîtrisées, elles sont interpellées | Test. |
+| Vagues 3-4 : prime de fin de vague 150 + 40 × vague (au lieu de 25) | Stratégie automatique : quartiers 2 à 4 gagnés sur la plupart des graines ; 5 et 6 restent durs. Mission témoin : `lines` 3★, `fortress` 2★, `passive` perd. |
+
+---
+
 # Validation — V04 · Mission témoin
 
 26 octobre 2026. 28 tests Node passent.

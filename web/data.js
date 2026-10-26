@@ -1,5 +1,5 @@
 /** Single source for the displayed revision and the build's cache-busting query. */
-export const REVISION = '04';
+export const REVISION = '05';
 /** Continuous income per service tier and second, paid during waves and lulls (never while preparing). */
 export const INCOME = { housing: 0.8, market: 1.4, civic: 0.6 };
 export const LULL = 25;
@@ -110,7 +110,7 @@ export const EQUIPMENT = {
     hp: 150,
     color: '#75bdf1',
     icon: 'squad',
-    desc: '4 agents mobiles · disperse les groupes proches.',
+    desc: '4 agents mobiles · maîtrise au contact : les personnes interpellées attendent un fourgon.',
     unit: true,
   },
   shield: {
@@ -182,7 +182,7 @@ export const EQUIPMENT = {
     hp: 110,
     color: '#cebcf2',
     icon: 'drone',
-    desc: 'Survole les obstacles · immobilise de petits groupes.',
+    desc: 'Survole les obstacles · marque les personnes visées : une fois maîtrisées, elles sont interpellées.',
     unit: true,
   },
   impulse: {
@@ -205,8 +205,29 @@ export const EQUIPMENT = {
     hp: 210,
     color: '#e7d393',
     icon: 'helicopter',
-    desc: 'Centre aérien niv. 2 · rejoint les fortes concentrations, projecteur et filets de zone.',
+    desc: 'Centre aérien niv. 2 · son projecteur neutralise lanceurs, saboteurs et barricadiers ; largue un filet sur la plus forte concentration toutes les 10 s.',
     unit: true,
+  },
+  smoke: {
+    name: 'Rideau fumigène',
+    short: 'Fumigène',
+    cost: 45,
+    unlock: 0,
+    range: 1.3,
+    color: '#c9d3d6',
+    icon: 'net',
+    desc: 'Ferme une rue 20 s sans barricade : la foule recalcule son itinéraire et contourne.',
+  },
+  decoy: {
+    name: 'Camion sono',
+    short: 'Sono',
+    cost: 90,
+    unlock: 0,
+    range: 6,
+    hp: 260,
+    color: '#f0b6d0',
+    icon: 'voice',
+    desc: 'Leurre 30 s : les groupes à 6 cases changent de cible et convergent vers lui.',
   },
 };
 export const CROWD = {
@@ -299,7 +320,7 @@ export const SERVICES = {
     icon: 'water',
     requires: ['command', 'workshop'],
     desc: 'Débloque les fourgons à eau et les filets de contrôle.',
-    unlock: ['water', 'net'],
+    unlock: ['water', 'net', 'smoke'],
   },
   lab: {
     name: 'Centre aérien',
@@ -319,7 +340,7 @@ export const SERVICES = {
     icon: 'voice',
     requires: ['command'],
     desc: 'Débloque les médiateurs, restaure la confiance et génère une prime à chaque accalmie.',
-    unlock: ['mediation'],
+    unlock: ['mediation', 'decoy'],
   },
   housing: {
     name: 'Quartier résidentiel',

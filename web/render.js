@@ -692,10 +692,91 @@ export class CityRenderer {
       Math.max(1, this.tile * 0.06)
     );
   }
+  /** Arrested: seated, hands behind, a blue tie mark; waits for a van. */
+  heldPerson(p) {
+    const q = this.point(p.x, p.y),
+      c = this.ctx,
+      s = Math.max(this.tile * 0.46, 5.3);
+    c.save();
+    this.ellipse(q.x, q.y, s * 0.42, s * 0.18, '#102a3b66');
+    this.ellipse(q.x, q.y - s * 0.2, s * 0.26, s * 0.2, CROWD[p.type]?.color ?? '#ed9d80');
+    this.ellipse(q.x, q.y - s * 0.5, s * 0.15, s * 0.15, '#e2c3a5');
+    this.ellipse(q.x + s * 0.2, q.y - s * 0.22, s * 0.08, s * 0.08, '#6fb6f0');
+    c.restore();
+  }
+  /** Police van: a box oriented along its heading, with an alternating light bar. */
+  van(v) {
+    const along = Math.abs(Math.cos(v.heading)) >= Math.abs(Math.sin(v.heading)),
+      w = along ? 1.15 : 0.62,
+      d = along ? 0.62 : 1.15,
+      c = this.ctx,
+      blink = Math.floor(this.t * 6) % 2;
+    const sh = this.point(v.x + 0.15, v.y + 0.15);
+    this.ellipse(sh.x, sh.y, this.tile * 0.7, this.tile * 0.32, '#0e223355');
+    this.prism(v.x, v.y, w, d, 0.55, '#e9eef2', '#f6f9fb');
+    this.prism(v.x, v.y, w * 0.98, d * 0.98, 0.12, '#2f6fae', '#3d7fc0', 0.22);
+    const top = this.point(v.x, v.y, 0.62);
+    c.save();
+    c.shadowColor = blink ? '#ff5a5a' : '#5aa8ff';
+    c.shadowBlur = this.tile * 0.6;
+    this.ellipse(
+      top.x - this.tile * 0.12,
+      top.y,
+      this.tile * 0.09,
+      this.tile * 0.06,
+      blink ? '#ff6b6b' : '#5b6b7a'
+    );
+    this.ellipse(
+      top.x + this.tile * 0.12,
+      top.y,
+      this.tile * 0.09,
+      this.tile * 0.06,
+      blink ? '#5b6b7a' : '#6bb0ff'
+    );
+    c.restore();
+    if (v.cargo)
+      this.text(
+        `${v.cargo}`,
+        top.x,
+        top.y - this.tile * 0.35,
+        clamp(this.tile * 0.26, 7, 10),
+        '#dbe9f6',
+        '800'
+      );
+  }
+  /** Sound truck decoy: pink truck with expanding sound rings. */
+  decoy(d, game) {
+    this.prism(d.x, d.y, 1.1, 0.7, 0.6, '#d98fb2', '#f0b6d0');
+    for (let i = 0; i < 3; i++) {
+      const k = (this.t * 0.8 + i / 3) % 1;
+      this.ring(d.x, d.y, 0.6 + k * 2.4, '#f0b6d0', (1 - k) * 0.6);
+    }
+    const p = this.point(d.x, d.y, 0.9);
+    this.text(
+      `SONO · ${Math.ceil(d.until - game.time)} s`,
+      p.x,
+      p.y - 8,
+      clamp(this.tile * 0.25, 7, 10),
+      '#f6d3e3',
+      '800'
+    );
+  }
   effects(game) {
     const c = this.ctx;
     for (const f of game.fields) {
       const p = this.point(f.x, f.y);
+      if (f.type === 'smoke') {
+        c.save();
+        c.globalAlpha = Math.min(1, (f.until - game.time) / 3) * 0.7;
+        for (let i = 0; i < 9; i++) {
+          const a = i * 2.4 + this.t * 0.3,
+            r = (0.35 + (i % 3) * 0.3) * f.radius,
+            q = this.point(f.x + Math.cos(a) * r, f.y + Math.sin(a) * r, 0.3 + (i % 2) * 0.3);
+          this.ellipse(q.x, q.y, this.tile * 0.55, this.tile * 0.36, '#c9d3d6aa');
+        }
+        c.restore();
+        continue;
+      }
       c.save();
       c.globalAlpha = Math.min(1, (f.until - game.time) / 2) * 0.55;
       this.ring(f.x, f.y, f.radius, '#a4e9d2', 0.7);
@@ -816,8 +897,19 @@ export class CityRenderer {
     for (const p of game.phase === 'breach' ? game.breach.actors : game.crowd)
       this.drawables.push({
         depth: p.x + p.y + (game.phase === 'breach' ? 100 : 0),
-        draw: () => this.person(p),
+        draw: () => {
+          if (p.state === 'held') return this.heldPerson(p);
+          this.person(p);
+          if (p.marked && p.state === 'march') {
+            // Drone mark: a small violet chevron above the head.
+            const q = this.point(p.x, p.y, 1.05);
+            this.ellipse(q.x, q.y, this.tile * 0.08, this.tile * 0.08, '#cebcf2');
+          }
+        },
       });
+    for (const v of game.vans ?? []) this.drawables.push({ depth: v.x + v.y + 0.5, draw: () => this.van(v) });
+    for (const d of game.decoys ?? [])
+      this.drawables.push({ depth: d.x + d.y + 0.5, draw: () => this.decoy(d, game) });
     for (const u of game.units)
       this.drawables.push({
         depth: u.x + u.y + (u.type === 'helicopter' ? 80 : 0.2),
