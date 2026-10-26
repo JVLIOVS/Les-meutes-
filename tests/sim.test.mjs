@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CityGame, route } from '../web/sim.js';
-import { GATES, SERVICES, ARMOR } from '../web/data.js';
+import { play } from './strategies.mjs';
+import { GATES, SERVICES, ARMOR, DISTRICTS, INCOME } from '../web/data.js';
 const step = (g, s) => {
   for (let i = 0; i < Math.ceil(s * 30); i++) g.update(1 / 30);
 };
@@ -11,6 +12,8 @@ function build(g, type, plot) {
   step(g, 4.1);
   return g.service(type);
 }
+/** Rule tests are not about the economy: give them a generous treasury. */
+const funded = (level = 0) => Object.assign(new CityGame(level), { money: 5000 });
 function base(g) {
   build(g, 'command');
   build(g, 'academy');
@@ -36,7 +39,7 @@ test('construction pays once, needs a real empty plot and unlocks troops after f
   assert.equal(g.buildService('command', 9, 9), null);
   const p = g.services[0];
   assert.equal(g.buildService('command', p.x, p.y), p.id);
-  assert.equal(g.money, 900);
+  assert.equal(g.money, DISTRICTS[0].budget - 100);
   assert.equal(g.buildService('command', p.x, p.y), null);
   step(g, 3);
   assert.equal(g.service('command'), undefined);
@@ -45,15 +48,16 @@ test('construction pays once, needs a real empty plot and unlocks troops after f
   assert.equal(g.builtCount, 2);
 });
 test('all nine constructible types have a purpose, and housing, trade and mediation pay their income', () => {
-  const g = new CityGame(5);
+  const g = funded(5);
   for (const type of Object.keys(SERVICES)) build(g, type);
   assert.equal(g.services.filter(s => s.state === 'built').length, 9);
   g.wave = 1;
-  assert.equal(g.waveReward(), 175 + 35 + 65 + 45);
+  assert.equal(g.waveReward(), 175);
+  assert.equal(g.income(), INCOME.housing + INCOME.market + INCOME.civic);
   for (const s of g.services) assert.ok(SERVICES[s.type].desc.length > 20);
 });
 test('the clinic heals ground units within its radius', () => {
-  const g = new CityGame();
+  const g = funded();
   build(g, 'command');
   const clinic = build(g, 'clinic');
   const id = g.place('patrol', clinic.access.x, clinic.access.y);
@@ -64,7 +68,7 @@ test('the clinic heals ground units within its radius', () => {
   assert.ok(u.healUntil > g.time - 0.1);
 });
 test('helicopters require aerial centre tier two and apply actual pressure and slowing to a dense crowd', () => {
-  const g = new CityGame(5);
+  const g = funded(5);
   for (const type of ['command', 'academy', 'workshop', 'depot', 'lab']) build(g, type);
   assert.equal(g.place('helicopter', 9, 9), null);
   const lab = g.service('lab');
@@ -86,7 +90,7 @@ test('helicopters require aerial centre tier two and apply actual pressure and s
   assert.deepEqual(g.units.at(-1).path, [{ x: 15, y: 15 }]);
 });
 test('facade armor absorbs damage before the structure and has separate repair and workshop gates', () => {
-  const g = new CityGame(5),
+  const g = funded(5),
     p = g.primary;
   assert.ok(g.reinforce(3));
   assert.equal(p.armorHp, 120);
@@ -113,7 +117,7 @@ test('facade armor absorbs damage before the structure and has separate repair a
   assert.equal(g.reinforce(3), false);
 });
 test('player-constructed services also receive destructible facade protections', () => {
-  const g = new CityGame();
+  const g = funded();
   const c = build(g, 'command');
   assert.ok(g.reinforce(c.id));
   g.damageBuilding(c, 50);
@@ -128,7 +132,7 @@ test('player-constructed services also receive destructible facade protections',
   assert.ok(g.service('command'));
 });
 test('building repair pauses under attack and never regenerates facade armor for free', () => {
-  const g = new CityGame();
+  const g = funded();
   build(g, 'command');
   build(g, 'workshop');
   const p = g.primary;
@@ -146,7 +150,7 @@ test('building repair pauses under attack and never regenerates facade armor for
   assert.equal(p.armorHp, 0);
 });
 test('crowd impacts have real damage, facing targets, strike poses, particles and building shake', () => {
-  const g = new CityGame();
+  const g = funded();
   g.spawn({ gate: 0, release: 0, group: 1 });
   const p = g.crowd[0];
   Object.assign(p, { state: 'march', x: 15, y: 12, target: 3 });
@@ -159,7 +163,7 @@ test('crowd impacts have real damage, facing targets, strike poses, particles an
   assert.ok(g.effects.some(e => e.kind === 'smash'));
 });
 test('police intervention and crowd movement carry animation state without changing their combat rules', () => {
-  const g = new CityGame();
+  const g = funded();
   base(g);
   const id = g.place('shield', 15, 12);
   g.spawn({ gate: 0, release: 0, group: 1 });
@@ -190,7 +194,7 @@ test('approaches remain seven tiles longer, and roads recalculate around barrica
   assert.ok(!path.some(p => p.x === 6 && p.y === 3));
 });
 test('the palace can survive below 25 percent; loss begins at zero and the crowd then actually crosses the door', () => {
-  const g = new CityGame();
+  const g = funded();
   build(g, 'command');
   g.startWave();
   g.primary.hp = 10;
@@ -216,7 +220,7 @@ test('the palace can survive below 25 percent; loss begins at zero and the crowd
   assert.match(g.reason, /pénétré dans le palais/);
 });
 test('save and reload preserve construction, armor, helicopters and the exact interior sequence state', () => {
-  const g = new CityGame(5);
+  const g = funded(5);
   base(g);
   g.reinforce(3);
   const snap = JSON.parse(JSON.stringify(g.snapshot())),
@@ -235,7 +239,7 @@ test('save and reload preserve construction, armor, helicopters and the exact in
   assert.throws(() => CityGame.restore(snap));
 });
 test('prototype two saves lose the three imposed buildings, keep player services and retarget old crowds', () => {
-  const g = new CityGame();
+  const g = funded();
   build(g, 'command');
   const old = g.snapshot();
   old.schema = 2;
@@ -253,38 +257,137 @@ test('prototype two saves lose the three imposed buildings, keep player services
   assert.equal(h.crowd[0].target, 3);
   assert.equal(h.snapshot().schema, 3);
 });
-test('one ordinary construction and deployment strategy completes all three opening waves', () => {
-  const g = new CityGame();
-  base(g);
-  g.place('shield', 15, 12);
-  g.place('patrol', 15, 11);
-  g.place('shield', 6, 3);
-  g.place('patrol', 5, 3);
-  g.setOrder('intercept');
-  let prepared = -1;
-  for (let i = 0; i < 30 * 600 && !['won', 'lost'].includes(g.phase); i++) {
-    if (['prepare', 'interval'].includes(g.phase)) {
-      if (prepared !== g.wave) {
-        prepared = g.wave;
-        g.reinforce(3);
-        for (const u of g.units) g.repair('unit', u.id);
-        if (g.wave > 0) {
-          const a = g.service('academy');
-          g.upgradeService(a.id);
-        }
-      }
-      if (g.phase === 'prepare') g.startWave();
-    }
-    g.update(1 / 30);
+test('mission témoin: two different strategies win on several seeds, a passive one loses', () => {
+  for (const seed of [71, 5, 999]) {
+    const lines = play('lines', seed),
+      fortress = play('fortress', seed),
+      passive = play('passive', seed);
+    assert.equal(lines.phase, 'won', JSON.stringify(lines));
+    assert.equal(fortress.phase, 'won', JSON.stringify(fortress));
+    assert.equal(passive.phase, 'lost', JSON.stringify(passive));
+    assert.ok(passive.debrief.length > 0, 'a defeat always names a cause');
   }
-  assert.equal(g.phase, 'won', g.reason);
-  assert.equal(g.wave, 3);
-  assert.equal(g.stats.dispersed, 108);
+});
+test('campaign smoke: every district ends (no freeze) and none is a wall at wave one', () => {
+  for (let level = 0; level < 6; level++) {
+    const r = play('adaptive', 71, level);
+    assert.ok(['won', 'lost'].includes(r.phase), `district ${level} froze in ${r.phase}`);
+    assert.ok(r.wave >= 2, `district ${level} lost at wave ${r.wave}`);
+  }
+});
+test('the tight start cannot build the whole country before the first wave', () => {
+  const g = new CityGame();
+  let built = 0;
+  for (const type of ['command', 'housing', 'market', 'civic', 'clinic', 'workshop'])
+    if (g.buildService(type, g.services[built].x, g.services[built].y) !== null) {
+      built++;
+      step(g, 4.1);
+    }
+  assert.ok(built <= 3, `built ${built}`);
+  const money = g.money;
+  step(g, 60);
+  assert.equal(g.money, money, 'no income while preparing, so waiting is not a strategy');
+});
+test('announced waves are the waves that come, with their targets known at launch', () => {
+  const g = new CityGame();
+  build(g, 'command');
+  for (let n = 1; n <= 3; n++) {
+    const plan = g.wavePlan(n);
+    g.phase = 'prepare';
+    g.wave = n - 1;
+    g.startWave();
+    assert.deepEqual(
+      g.rallies.map(r => ({ gate: r.gate, count: r.count })),
+      plan
+    );
+    assert.ok(g.rallies.every(r => g.targets.some(b => b.id === r.target)));
+    assert.ok(g.rallyEta(g.rallies[0]) > 5);
+  }
+  assert.deepEqual(
+    g.wavePlan(1).map(p => p.gate),
+    [0]
+  );
+});
+test('flow-field paths match the optimal routes and detour around barricades', () => {
+  for (const gate of GATES) {
+    const g = new CityGame();
+    assert.equal(g.path(gate, { x: 15, y: 12 }).length, route(gate, { x: 15, y: 12 }).length);
+  }
+  const g = new CityGame();
+  g.barriers.push({ id: 1, x: 6, y: 3, hp: 100 });
+  const path = g.path({ x: 3, y: 3 }, { x: 9, y: 3 });
+  assert.ok(path.length > 6);
+  assert.ok(!path.some(p => p.x === 6 && p.y === 3));
+});
+test('a crowd jostling at a waypoint keeps moving instead of freezing the wave', () => {
+  const g = new CityGame();
+  build(g, 'command');
+  g.startWave();
+  g.rallies = [];
+  for (let i = 0; i < 4; i++) {
+    g.spawn({ gate: 0, release: 0, group: 1, target: 3 });
+    Object.assign(g.crowd.at(-1), {
+      state: 'march',
+      x: 6 + (i % 2) * 0.3 - 0.15,
+      y: 3 + (i > 1 ? 0.15 : -0.15),
+    });
+  }
+  for (const p of g.crowd) p.path = [{ x: 6, y: 3 }, ...g.path({ x: 6, y: 3 }, g.primary.access)];
+  step(g, 20);
+  assert.ok(
+    g.crowd.every(p => p.x > 9 || p.y > 3.5),
+    'everyone left the waypoint'
+  );
+});
+test('builders restore a ruined service with its type and tier for half its price', () => {
+  const g = funded();
+  build(g, 'command');
+  build(g, 'workshop');
+  const market = build(g, 'market');
+  g.upgradeService(market.id);
+  step(g, 6.1);
+  g.damageBuilding(market, 9999);
+  assert.equal(market.state, 'ruin');
+  const money = g.money;
+  assert.ok(g.restore(market.id));
+  assert.equal(g.money, money - 65);
+  assert.equal(g.restore(market.id), false, 'one job at a time');
+  step(g, 10.5); // the blow that ruined it pauses builders for a moment
+  assert.equal(market.state, 'built');
+  assert.equal(market.tier, 2);
+  assert.equal(market.hp, market.maxHp);
+  assert.deepEqual(g.stats.lost, ['Commerces']);
+});
+test('upgrading a service adds structure but no longer heals it to full for free', () => {
+  const g = funded();
+  const c = build(g, 'command');
+  c.hp = 100;
+  g.upgradeService(c.id);
+  step(g, 6.1);
+  assert.equal(c.maxHp, 320);
+  assert.ok(c.hp < 200);
+});
+test('a lost command post does not freeze the lull: the next wave still comes', () => {
+  const g = funded();
+  const c = build(g, 'command');
+  for (const [x, y] of [
+    [3, 0],
+    [3, 2],
+    [15, 11],
+    [15, 13],
+  ])
+    g.place('patrol', x, y);
+  g.startWave();
+  g.damageBuilding(c, 9999);
+  for (let i = 0; i < 30 * 400 && g.phase === 'wave'; i++) g.update(1 / 30);
+  assert.equal(g.phase, 'interval');
+  step(g, 26);
+  assert.equal(g.wave, 2);
 });
 
 // P0 regressions found in the V03 hand-off audit (T01, T02, T03, T08).
 test('T01: the construction preview gives the same verdict as the build itself', () => {
-  const g = new CityGame();
+  const g = funded();
   const plot = g.services[0];
   for (const [x, y] of [
     [9, 9],
@@ -302,7 +405,7 @@ test('T01: the construction preview gives the same verdict as the build itself',
   assert.equal(g.canBuild('command'), null, 'palette cards without coordinates only check the type');
 });
 test('T02: no crowd attack reaches aerial units', () => {
-  const g = new CityGame(5);
+  const g = funded(5);
   for (const type of ['command', 'academy', 'workshop', 'depot', 'lab']) build(g, type);
   g.upgradeService(g.service('lab').id);
   step(g, 6.1);
@@ -330,7 +433,7 @@ test('T02: no crowd attack reaches aerial units', () => {
   assert.ok(patrol.hp <= hp - 18, 'ground units remain sabotage targets');
 });
 test('T03: a spawn refused by the crowd cap stays pending instead of being counted', () => {
-  const g = new CityGame();
+  const g = funded();
   build(g, 'command');
   g.startWave();
   const total = g.rallies.reduce((n, r) => n + r.count, 0);
@@ -355,7 +458,7 @@ test('T03: a spawn refused by the crowd cap stays pending instead of being count
   );
 });
 test('T08: every debit is reflected in stats.spent', () => {
-  const g = new CityGame(5);
+  const g = funded(5);
   const start = g.money;
   base(g);
   g.place('patrol', 3, 9);

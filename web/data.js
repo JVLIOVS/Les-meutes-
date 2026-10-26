@@ -1,5 +1,8 @@
 /** Single source for the displayed revision and the build's cache-busting query. */
-export const REVISION = '03.1';
+export const REVISION = '04';
+/** Continuous income per service tier and second, paid during waves and lulls (never while preparing). */
+export const INCOME = { housing: 0.8, market: 1.4, civic: 0.6 };
+export const LULL = 25;
 export const SIZE = 19;
 export const EDGE_MIN = -7,
   EDGE_MAX = 25,
@@ -8,13 +11,19 @@ export const DISTRICTS = [
   {
     id: 0,
     name: 'Les Lisières',
-    subtitle: 'Tenir les portes',
+    subtitle: 'Mission témoin',
     category: 'HABITATIONS',
     color: '#a9d8c2',
     waves: 3,
     base: 24,
-    budget: 1000,
-    objective: 'Un palais. Tout le reste est à bâtir : commandement, logements, commerces et protections.',
+    budget: 320,
+    objective: 'Un palais, 320 crédits. Bâtissez, lisez les rues, tenez trois vagues très différentes.',
+    // Hand-written waves: one street, then a fork, then two fronts. Other districts use the formula.
+    plan: [
+      { gates: [0], count: 18 },
+      { gates: [0, 1], count: 30 },
+      { gates: [1, 3], count: 44 },
+    ],
     types: ['walker', 'runner'],
     entrances: [0, 1],
     xp: 100,
@@ -27,7 +36,7 @@ export const DISTRICTS = [
     color: '#f3c48b',
     waves: 4,
     base: 30,
-    budget: 1110,
+    budget: 420,
     objective: 'Vos commerces, une fois bâtis, deviennent des cibles. La foule arrive par trois artères.',
     types: ['walker', 'runner', 'heavy'],
     entrances: [0, 1, 2],
@@ -41,7 +50,7 @@ export const DISTRICTS = [
     color: '#eab2b8',
     waves: 4,
     base: 36,
-    budget: 1220,
+    budget: 500,
     objective: 'Les attroupements se divisent. Coupez les accès sans vous enfermer.',
     types: ['walker', 'runner', 'heavy', 'builder'],
     entrances: [0, 1, 2, 3],
@@ -55,7 +64,7 @@ export const DISTRICTS = [
     color: '#afbfef',
     waves: 5,
     base: 42,
-    budget: 1330,
+    budget: 580,
     objective: 'Des lanceurs visent vos équipes à distance. Gardez la confiance de la ville.',
     types: ['walker', 'runner', 'heavy', 'builder', 'slinger'],
     entrances: [0, 1, 2, 3],
@@ -69,7 +78,7 @@ export const DISTRICTS = [
     color: '#a6cddd',
     waves: 5,
     base: 50,
-    budget: 1440,
+    budget: 860,
     objective: 'Vos renforts peuvent être isolés par des obstacles adverses.',
     types: ['walker', 'runner', 'heavy', 'builder', 'slinger', 'saboteur'],
     entrances: [0, 1, 2, 3],
@@ -83,7 +92,7 @@ export const DISTRICTS = [
     color: '#ead89c',
     waves: 6,
     base: 60,
-    budget: 1550,
+    budget: 980,
     objective: 'Protégez le palais et vos services. Plusieurs rassemblements convergent.',
     types: ['walker', 'runner', 'heavy', 'builder', 'slinger', 'saboteur'],
     entrances: [0, 1, 2, 3],

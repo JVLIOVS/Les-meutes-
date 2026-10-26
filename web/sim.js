@@ -15,6 +15,8 @@ import {
   EDGE_MIN,
   EDGE_MAX,
   ARMOR,
+  INCOME,
+  LULL,
 } from './data.js';
 export class Rng {
   constructor(seed = 1) {
@@ -74,6 +76,86 @@ export function route(from, to, barriers = [], hostile = [], vehicle = false) {
   }
   return result;
 }
+/**
+ * Flow field: one reverse Dijkstra per destination gives every road tile its cost to reach it.
+ * The whole crowd then descends the same field, so groups move and detour together, and the
+ * cost no longer grows with the number of agents (one field per target, not one search per person).
+ */
+export function flowField(to, barriers = [], hostile = [], vehicle = false) {
+  const walls = new Set(barriers.filter(b => b.hp > 0).map(b => key(b.x, b.y))),
+    blocks = new Set(hostile.filter(b => b.hp > 0).map(b => key(b.x, b.y))),
+    penalty = k => 1 + (walls.has(k) ? 24 : 0) + (blocks.has(k) ? (vehicle ? 18 : 4) : 0),
+    goal = { x: Math.round(to.x), y: Math.round(to.y) },
+    cost = new Map(),
+    heap = [];
+  if (!road(goal.x, goal.y)) return { cost, penalty };
+  const push = (c, p) => {
+    heap.push([c, p]);
+    for (let i = heap.length - 1; i > 0; ) {
+      const j = (i - 1) >> 1;
+      if (heap[j][0] <= heap[i][0]) break;
+      [heap[i], heap[j]] = [heap[j], heap[i]];
+      i = j;
+    }
+  };
+  const pop = () => {
+    const top = heap[0],
+      last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      for (let i = 0; ; ) {
+        const l = 2 * i + 1,
+          r = l + 1;
+        let m = i;
+        if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+        if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+        if (m === i) break;
+        [heap[i], heap[m]] = [heap[m], heap[i]];
+        i = m;
+      }
+    }
+    return top;
+  };
+  cost.set(key(goal.x, goal.y), 0);
+  push(0, goal);
+  while (heap.length) {
+    const [c, p] = pop(),
+      pk = key(p.x, p.y);
+    if (c > cost.get(pk)) continue;
+    // Stepping from a neighbour onto p costs p's penalty.
+    const next = c + penalty(pk);
+    for (const n of neighbors(p)) {
+      const nk = key(n.x, n.y);
+      if (next < (cost.get(nk) ?? Infinity)) {
+        cost.set(nk, next);
+        push(next, n);
+      }
+    }
+  }
+  return { cost, penalty };
+}
+/** Steepest descent from `from` along a field; same shape as route(): start excluded, goal included. */
+export function descend(field, from) {
+  let p = { x: Math.round(from.x), y: Math.round(from.y) };
+  const result = [];
+  if (!field.cost.has(key(p.x, p.y))) return result;
+  for (let i = 0; i < 400 && field.cost.get(key(p.x, p.y)) > 0; i++) {
+    let best = null,
+      bestCost = Infinity;
+    for (const n of neighbors(p)) {
+      const nk = key(n.x, n.y),
+        c = (field.cost.get(nk) ?? Infinity) + field.penalty(nk);
+      if (c < bestCost) {
+        bestCost = c;
+        best = n;
+      }
+    }
+    if (!best) break;
+    result.push(best);
+    p = best;
+  }
+  return result;
+}
 export class CityGame {
   constructor(level = 0, seed = 71) {
     this.level = clamp(level, 0, 5);
@@ -104,7 +186,15 @@ export class CityGame {
     this.command = 'hold';
     this.force = false;
     this.nextImpulse = 0;
-    this.stats = { dispersed: 0, damage: 0, spent: 0, groups: 0, barricades: 0 };
+    this.stats = {
+      dispersed: 0,
+      damage: 0,
+      spent: 0,
+      groups: 0,
+      barricades: 0,
+      gateDamage: [0, 0, 0, 0],
+      lost: [],
+    };
     this.selected = null;
     this.reason = '';
   }
@@ -120,13 +210,11 @@ export class CityGame {
     );
   }
   waveReward() {
-    return (
-      150 +
-      this.wave * 25 +
-      (this.service('civic')?.tier ?? 0) * 45 +
-      (this.service('housing')?.tier ?? 0) * 35 +
-      (this.service('market')?.tier ?? 0) * 65
-    );
+    return 150 + this.wave * 25;
+  }
+  /** Credits per second from living services (paid during waves and lulls only). */
+  income() {
+    return Object.entries(INCOME).reduce((n, [type, rate]) => n + (this.service(type)?.tier ?? 0) * rate, 0);
   }
   equipmentIssue(type) {
     if (type === 'helicopter' && (this.service('lab')?.tier ?? 0) < 2) return 'Centre aérien niveau 2 requis';
@@ -159,14 +247,15 @@ export class CityGame {
     this.routeCache.clear();
     this.version++;
   }
+  /** Fields are cached per destination and dropped whenever the road topology changes (bounded cache). */
   path(from, to, vehicle = false) {
-    const k = key(from.x, from.y) + '>' + key(to.x, to.y) + ':' + vehicle;
-    let p = this.routeCache.get(k);
-    if (!p) {
-      p = route(from, to, this.barriers, this.hostile, vehicle);
-      this.routeCache.set(k, p);
+    const k = key(to.x, to.y) + ':' + vehicle;
+    let field = this.routeCache.get(k);
+    if (!field) {
+      field = flowField(to, this.barriers, this.hostile, vehicle);
+      this.routeCache.set(k, field);
     }
-    return p.map(v => ({ ...v }));
+    return descend(field, from);
   }
   /** Every debit goes through here so stats.spent always matches the money actually paid. */
   spend(amount) {
@@ -297,6 +386,7 @@ export class CityGame {
     b.hp = Math.max(0, b.hp - amount);
     this.stats.damage += amount;
     if (b.hp === 0) {
+      (this.stats.lost ??= []).push(b.name ?? SERVICES[b.type]?.short);
       if (b.state) b.state = 'ruin';
       this.fx('collapse', b.x, b.y, '#c6b49a', 2);
       this.trust -= 12;
@@ -356,7 +446,8 @@ export class CityGame {
     return true;
   }
   startWave() {
-    if (!this.service('command')) {
+    // Only the first launch needs a command post: a lost post must not freeze the lull forever.
+    if (this.phase === 'prepare' && !this.service('command')) {
       this.emit('toast', { text: 'Construisez d’abord le poste de commandement.' });
       return false;
     }
@@ -364,26 +455,40 @@ export class CityGame {
     this.phase = 'wave';
     this.wave++;
     this.countdown = 0;
-    const total = this.def.base + (this.wave - 1) * 12,
-      available = this.def.entrances,
-      groups = Math.min(available.length, this.wave + 1),
-      per = Math.ceil(total / groups);
-    for (let i = 0; i < groups; i++) {
-      const gate = available[(i + this.wave - 1) % available.length],
-        n = Math.min(per, total - i * per);
-      if (n <= 0) continue;
-      this.rallies.push({
-        id: this.nextId++,
-        gate,
-        count: n,
-        spawned: 0,
-        start: this.time + i * 2.4,
-        release: this.time + 5 + i * 2.4,
-        group: this.nextId++,
-      });
-    }
+    this.rallies = this.wavePlan(this.wave).map(({ gate, count }, i) => ({
+      id: this.nextId++,
+      gate,
+      count,
+      spawned: 0,
+      start: this.time + i * 2.4,
+      release: this.time + 5 + i * 2.4,
+      group: this.nextId++,
+      target: this.targetFor(gate),
+    }));
     this.emit('wave', { wave: this.wave });
     return true;
+  }
+  /** Deterministic composition of wave n, so it can be announced before it starts. */
+  wavePlan(n) {
+    if (n < 1 || n > this.def.waves) return [];
+    const planned = this.def.plan?.[n - 1];
+    const total = planned?.count ?? Math.round(this.def.base * 0.6) + (n - 1) * 14,
+      available = this.def.entrances,
+      gates =
+        planned?.gates ??
+        available
+          .slice(0, Math.min(available.length, n + 1))
+          .map((_, i) => available[(i + n - 1) % available.length]),
+      per = Math.ceil(total / gates.length);
+    return gates
+      .map((gate, i) => ({ gate, count: Math.max(0, Math.min(per, total - i * per)) }))
+      .filter(g => g.count > 0);
+  }
+  /** Seconds before a rally reaches its target, at walking pace, from now. */
+  rallyEta(r) {
+    const target = this.targets.find(b => b.id === r.target);
+    if (!target) return null;
+    return Math.max(0, r.release - this.time) + this.path(GATES[r.gate], target.access).length / 0.95;
   }
   targetFor(gate) {
     const alive = this.targets.filter(b => b.hp > 0),
@@ -454,7 +559,6 @@ export class CityGame {
       p.path = this.path(p, GATES[p.gate]);
       p.pathVersion = this.version;
       this.stats.dispersed++;
-      this.money += 3;
       if (this.force) this.trust -= 0.35;
       this.fx('disperse', p.x, p.y, u?.type === 'mediation' ? '#b3e5bb' : '#aadbef', 0.6);
     }
@@ -463,7 +567,10 @@ export class CityGame {
     if (!entity.path.length) return;
     const next = entity.path[0],
       d = dist(entity, next);
-    if (d < 0.12) {
+    // A waypoint also counts as reached once the following one is no farther than a tile: in a dense
+    // group, separation keeps people from ever standing on the exact point, which used to freeze them.
+    const after = entity.path[1];
+    if (d < 0.12 || (after && dist(entity, after) <= 1)) {
       entity.path.shift();
       return;
     }
@@ -674,6 +781,7 @@ export class CityGame {
         const amount = CROWD[p.type].damage * (1 + (p.tier - 1) * 0.12) * dt;
         const wall = b.primary ? { x: 14, y: 12 } : { x: b.x + (p.x > b.x ? 1 : -1), y: b.y };
         this.strike(p, wall, (b.armorHp ?? 0) > 0 ? 'shatter' : 'smash');
+        if (this.stats.gateDamage) this.stats.gateDamage[p.gate] += amount;
         this.damageBuilding(b, amount);
         continue;
       }
@@ -729,6 +837,7 @@ export class CityGame {
     dt = Math.min(0.05, dt);
     this.time += dt;
     this.updateConstruction(dt);
+    if (this.phase !== 'prepare') this.money += this.income() * dt;
     this.effects = this.effects.filter(e => this.time - e.born < (e.kind === 'stone' ? 0.7 : 1.1));
     this.fields = this.fields.filter(f => f.until > this.time);
     for (const b of [...this.buildings, ...this.services]) b.flash = Math.max(0, (b.flash ?? 0) - dt);
@@ -768,7 +877,7 @@ export class CityGame {
         if (this.wave >= this.def.waves) this.end(true, 'Les rassemblements sont dispersés. La ville tient.');
         else {
           this.phase = 'interval';
-          this.countdown = 18;
+          this.countdown = LULL;
           this.rallies = [];
         }
       }
@@ -807,6 +916,7 @@ export class CityGame {
     }
     const plot = this.buildPlot(x, y);
     this.spend(SERVICES[type].cost);
+    this.repairJobs = this.repairJobs.filter(j => j.id !== plot.id);
     Object.assign(plot, {
       type,
       state: 'building',
@@ -842,6 +952,25 @@ export class CityGame {
     b.hp = b.maxHp;
     this.clearRoutes();
     this.fx('deploy', b.x, b.y, '#f4d49b', 1);
+    return true;
+  }
+  /** Builders bring a ruined service back with its type and tier, for half its construction price. */
+  restoreIssue(s) {
+    if (!s || s.state !== 'ruin' || !s.type) return 'Rien à restaurer';
+    if (!this.service('workshop')) return 'Chantier requis';
+    if (this.repairJobs.some(j => j.id === s.id)) return 'Restauration en cours';
+    if (this.services.some(o => o !== s && o.type === s.type && ['built', 'building'].includes(o.state)))
+      return 'Ce service existe déjà ailleurs';
+    return null;
+  }
+  restoreCost(s) {
+    return Math.round(SERVICES[s.type].cost * 0.5);
+  }
+  restore(id) {
+    const s = this.services.find(s => s.id === id);
+    if (this.restoreIssue(s) || !this.spend(this.restoreCost(s))) return false;
+    this.repairJobs.push({ id, remaining: 10, rate: s.maxHp / 10, restore: true });
+    this.fx('deploy', s.x, s.y, '#e0bc80', 1.4);
     return true;
   }
   queueRepair(id) {
@@ -881,7 +1010,7 @@ export class CityGame {
           s.upgrading = 0;
           s.tier++;
           s.maxHp += 80;
-          s.hp = s.maxHp;
+          s.hp = Math.min(s.maxHp, s.hp + 80);
           this.emit('toast', { text: SERVICES[s.type].short + ' · niveau ' + s.tier });
         }
       }
@@ -899,6 +1028,13 @@ export class CityGame {
         j.remaining -= dt;
         b.hp = Math.min(b.maxHp, b.hp + j.rate * dt);
         this.builderTarget = b.id;
+        if (j.restore && j.remaining <= 0 && b.state === 'ruin') {
+          b.state = 'built';
+          b.hp = b.maxHp;
+          b.armorHp = 0;
+          this.emit('toast', { text: SERVICES[b.type].name + ' restauré par les bâtisseurs.' });
+          this.fx('deploy', b.x, b.y, SERVICES[b.type].color, 1.7);
+        }
       }
       this.repairJobs = this.repairJobs.filter(j => j.remaining > 0);
       const damaged = this.targets
@@ -992,6 +1128,28 @@ export class CityGame {
     this.reason = reason;
     this.force = false;
     this.emit('end', { win });
+  }
+  /** Plain-language causes for the result screen, derived from what actually happened. */
+  debrief() {
+    const lines = [],
+      gd = this.stats.gateDamage ?? [],
+      total = gd.reduce((n, v) => n + v, 0);
+    if (total > 0) {
+      const worst = gd.indexOf(Math.max(...gd));
+      lines.push(
+        `${Math.round((gd[worst] / total) * 100)} % des dégâts sont venus de ${GATES[worst].name}. Barrez cette artère plus tôt.`
+      );
+    }
+    const lost = (this.stats.lost ?? []).filter(n => n && n !== this.primary.name);
+    if (lost.length) lines.push(`Services perdus : ${[...new Set(lost)].join(', ')}.`);
+    if (this.trust < 40)
+      lines.push('La confiance s’est effondrée : plus de médiation, moins d’ordre renforcé.');
+    if (this.phase === 'won') {
+      if (this.integrity < 65)
+        lines.push('Le palais a trop souffert : renforcez sa façade avant la dernière vague.');
+      if (this.trust < 70) lines.push('Gardez la confiance au-dessus de 70 % pour la troisième étoile.');
+    } else if (!this.service('workshop')) lines.push('Sans chantier, aucune réparation ni restauration.');
+    return lines.slice(0, 3);
   }
   get stars() {
     return this.phase === 'won' ? 1 + (this.integrity >= 65 ? 1 : 0) + (this.trust >= 70 ? 1 : 0) : 0;
