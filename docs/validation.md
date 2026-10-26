@@ -12,6 +12,8 @@
 
 Non-régression : une empreinte de 18 parties scriptées (6 quartiers × 3 graines, instantanés hachés) est identique avant/après le formatage et les corrections. Navigateur Chromium (Playwright, 1280 × 800 et 390 × 844 tactile) : départ, construction, vague, prise du palais (48/48 entrés) et bilan, sans erreur console. Ce n'est pas une certification sur appareil physique.
 
+Captures : `docs/images/prototype03.1-t01-preview.jpg` (aperçu rouge sur une rue / terrain surligné) et `docs/images/prototype03.1-mobile.jpg` (accueil, vague, intérieur du palais à 390 × 844).
+
 Révision affichée et cache des modules : `REVISION` dans `web/data.js` (accueil, HUD, `?v=` du build).
 
 ---
