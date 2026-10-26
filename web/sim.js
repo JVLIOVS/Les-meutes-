@@ -32,6 +32,8 @@ export class Rng {
 }
 const NO_PLOT = 'Touchez un terrain marqué + pour bâtir ce service.';
 /** Drones and helicopters fly: no crowd attack (contact, stones, sabotage) can reach them. */
+/** Endless mode: the round from which each crowd profile appears. */
+const ROUND_UNLOCKS = { walker: 1, runner: 1, heavy: 4, builder: 6, slinger: 8, saboteur: 10 };
 export const airborne = u => u.type === 'drone' || u.type === 'helicopter';
 const neighbors = p =>
   [
@@ -240,7 +242,8 @@ export class CityGame {
     return this.crowd.filter(p => p.state === 'march' || p.state === 'rally').length;
   }
   get rank() {
-    return 1 + Math.floor(this.level / 2);
+    // Endless: the reinforced order (rank 3) opens at round 8.
+    return this.def.endless ? 1 + Math.floor(this.wave / 4) : 1 + Math.floor(this.level / 2);
   }
   emit(type, data = {}) {
     this.events.push({ type, ...data });
@@ -504,7 +507,7 @@ export class CityGame {
   /** Deterministic composition of wave n, so it can be announced before it starts. */
   wavePlan(n) {
     if (n < 1 || n > this.def.waves) return [];
-    const planned = this.def.plan?.[n - 1];
+    const planned = this.def.plan?.[n - 1] ?? (this.def.endless ? this.escalateRound(n) : null);
     const total = planned?.count ?? Math.round(this.def.base * 0.6) + (n - 1) * 14,
       available = this.def.entrances,
       gates =
@@ -516,6 +519,22 @@ export class CityGame {
     return gates
       .map((gate, i) => ({ gate, count: Math.max(0, Math.min(per, total - i * per)) }))
       .filter(g => g.count > 0);
+  }
+  /** Endless rounds after the written opening: more people, then more gates (2 → 3 → 4). */
+  escalateRound(n) {
+    const gates = n < 6 ? 2 : n < 9 ? 3 : 4,
+      start = n % 4;
+    return {
+      count: 44 + (n - 3) * 10,
+      gates: Array.from({ length: gates }, (_, i) => (start + i) % 4),
+    };
+  }
+  /** Crowd profiles join the endless rounds one by one; fixed districts keep their own list. */
+  crowdTypes() {
+    if (!this.def.endless) return this.def.types;
+    return Object.entries(ROUND_UNLOCKS)
+      .filter(([, round]) => Math.max(1, this.wave) >= round)
+      .map(([type]) => type);
   }
   /** Seconds before a rally reaches its target, at walking pace, from now. */
   rallyEta(r) {
@@ -543,7 +562,7 @@ export class CityGame {
   spawn(r) {
     if (this.crowd.length >= 420) return false;
     const g = GATES[r.gate],
-      type = this.rng.pick(this.def.types),
+      type = this.rng.pick(this.crowdTypes()),
       d = CROWD[type],
       offset = this.rng.next() - 0.5;
     const tier = 1 + Math.floor((this.level + this.wave - 1) / 3);
@@ -647,7 +666,7 @@ export class CityGame {
         if (u.pathVersion !== this.version) this.moveUnit(u.id, u.goal.x, u.goal.y);
         const block = this.walk(
           u,
-          u.type === 'helicopter' ? 2.5 : u.type === 'drone' ? 2.1 : 1.4,
+          u.type === 'helicopter' ? 2.5 : u.type === 'drone' ? 2.1 : 2,
           dt,
           u.type === 'water'
         );
@@ -747,33 +766,30 @@ export class CityGame {
     return best;
   }
   /**
-   * Vans leave the command post, collect up to six held people close together, and drive back.
-   * Each delivered person is worth 4 credits: arrests feed the treasury, dispersals do not.
+   * End of round only: when the lull begins, vans leave the command post, each collects one pile
+   * of held people (up to eight close together) and drives them back to the post. +4 per person.
    */
   updateArrests(dt) {
     const base = this.service('command')?.access ?? GATES[0],
-      capacity = 1 + (this.service('command')?.tier ?? 0),
       waiting = this.crowd.filter(p => p.state === 'held' && !p.van);
-    if (waiting.length && this.vans.length < capacity) {
-      const first = waiting.reduce((a, b) => (a.heldAt < b.heldAt ? a : b));
-      if (waiting.length >= 3 || this.time - first.heldAt > 6) {
-        const load = waiting.filter(p => dist(p, first) < 2.5).slice(0, 6),
-          stop = { x: Math.round(first.x), y: Math.round(first.y) },
-          van = {
-            id: this.nextId++,
-            x: base.x,
-            y: base.y,
-            state: 'go',
-            stop,
-            cargo: 0,
-            load: load.map(p => p.id),
-            heading: 0,
-            wait: 0,
-          };
-        van.path = this.path(van, stop, true);
-        for (const p of load) p.van = van.id;
-        this.vans.push(van);
-      }
+    if (this.phase === 'interval' && waiting.length && this.vans.length < 6) {
+      const first = waiting[0],
+        load = waiting.filter(p => dist(p, first) < 3).slice(0, 8),
+        stop = { x: Math.round(first.x), y: Math.round(first.y) },
+        van = {
+          id: this.nextId++,
+          x: base.x,
+          y: base.y,
+          state: 'go',
+          stop,
+          cargo: 0,
+          load: load.map(p => p.id),
+          heading: 0,
+          wait: 0,
+        };
+      van.path = this.path(van, stop, true);
+      for (const p of load) p.van = van.id;
+      this.vans.push(van);
     }
     for (const van of this.vans) {
       van.moving = false;
@@ -783,7 +799,10 @@ export class CityGame {
           if (van.state === 'back') {
             this.money += van.cargo * 4;
             this.stats.arrested = (this.stats.arrested ?? 0) + van.cargo;
-            if (van.cargo) this.fx('deploy', van.x, van.y, '#9fc7ef', 0.9);
+            if (van.cargo) {
+              this.fx('deploy', van.x, van.y, '#9fc7ef', 0.9);
+              this.emit('toast', { text: `${van.cargo} interpellés conduits au poste · +${van.cargo * 4}` });
+            }
             van.state = 'done';
           } else {
             van.state = 'load';
@@ -831,12 +850,7 @@ export class CityGame {
       }
       if (p.state === 'gone') continue;
       if (p.state === 'held') {
-        // Nobody came: after 30 s the person gets up and goes home.
-        if (!p.van && this.time - p.heldAt > 30) {
-          p.state = 'leave';
-          p.path = this.path(p, GATES[p.gate]);
-        }
-        continue;
+        continue; // waits for the end-of-round vans
       }
       if (p.state === 'boarding') {
         const van = this.vans.find(v => v.id === p.van);

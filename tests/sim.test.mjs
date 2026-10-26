@@ -257,21 +257,21 @@ test('prototype two saves lose the three imposed buildings, keep player services
   assert.equal(h.crowd[0].target, 3);
   assert.equal(h.snapshot().schema, 3);
 });
-test('mission témoin: two different strategies win on several seeds, a passive one loses', () => {
+test('survival opening: two different strategies hold three rounds on several seeds, a passive one falls', () => {
   for (const seed of [71, 5, 999]) {
     const lines = play('lines', seed),
       fortress = play('fortress', seed),
       passive = play('passive', seed);
-    assert.equal(lines.phase, 'won', JSON.stringify(lines));
-    assert.equal(fortress.phase, 'won', JSON.stringify(fortress));
+    assert.equal(lines.phase, 'survived', JSON.stringify(lines));
+    assert.equal(fortress.phase, 'survived', JSON.stringify(fortress));
     assert.equal(passive.phase, 'lost', JSON.stringify(passive));
     assert.ok(passive.debrief.length > 0, 'a defeat always names a cause');
   }
 });
 test('campaign smoke: every district ends (no freeze) and none is a wall at wave one', () => {
   for (let level = 0; level < 6; level++) {
-    const r = play('adaptive', 71, level);
-    assert.ok(['won', 'lost'].includes(r.phase), `district ${level} froze in ${r.phase}`);
+    const r = play('adaptive', 71, level, level === 0 ? 6 : Infinity);
+    assert.ok(['won', 'lost', 'survived'].includes(r.phase), `district ${level} froze in ${r.phase}`);
     assert.ok(r.wave >= 2, `district ${level} lost at wave ${r.wave}`);
   }
 });
@@ -495,7 +495,10 @@ test('a person subdued by a patrol is arrested, collected by a van and paid for 
   assert.ok(g.crowd.filter(p => p.state === 'held').length === 3);
   const money = g.money;
   g.updateArrests(1 / 30);
-  assert.equal(g.vans.length, 1, 'three people waiting call a van');
+  assert.equal(g.vans.length, 0, 'no van during the round');
+  g.phase = 'interval';
+  g.updateArrests(1 / 30);
+  assert.equal(g.vans.length, 1, 'the lull sends one van per pile');
   let sawLoading = false;
   for (let i = 0; i < 30 * 60 && (g.vans.length || !sawLoading); i++) {
     g.updateArrests(1 / 30);
@@ -521,7 +524,7 @@ test('water and mediation disperse; a drone mark turns a dispersal into an arres
   assert.equal(a.state, 'leave');
   assert.equal(b.state, 'held');
 });
-test('held people nobody collects get up after 30 s; arrests never count as an active crowd', () => {
+test('held people wait for the end of the round and never count as an active crowd', () => {
   const g = new CityGame();
   build(g, 'command');
   g.startWave();
@@ -529,12 +532,22 @@ test('held people nobody collects get up after 30 s; arrests never count as an a
   const p = marcher(g, 9, 15, { hp: 1 });
   g.hit(p, 5, { type: 'shield' });
   assert.equal(g.activeCrowd, 0);
-  p.van = 999; // pretend a van is on its way, then let it vanish
-  g.vans = [];
-  p.van = null;
-  g.time += 31;
+  g.time += 120;
   g.updateCrowd(1 / 30);
-  assert.equal(p.state, 'leave');
+  assert.equal(p.state, 'held');
+});
+test('endless survival never ends in victory and escalates gates and profiles', () => {
+  const g = new CityGame();
+  assert.equal(g.def.waves, Infinity);
+  assert.deepEqual(
+    [4, 6, 9].map(n => g.wavePlan(n).length),
+    [2, 3, 4]
+  );
+  assert.ok(g.wavePlan(12).reduce((n, w) => n + w.count, 0) > g.wavePlan(4).reduce((n, w) => n + w.count, 0));
+  g.wave = 10;
+  assert.ok(g.crowdTypes().includes('saboteur'));
+  g.wave = 1;
+  assert.deepEqual(g.crowdTypes(), ['walker', 'runner']);
 });
 test('a smoke screen closes a street in the flow field until it clears', () => {
   const g = funded();

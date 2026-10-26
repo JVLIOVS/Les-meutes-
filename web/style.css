@@ -2045,3 +2045,22 @@ h1 > span {
   background: #ffffff0d;
   border-radius: 4px;
 }
+
+/* V06 — eleven interventions: one row on desktop, two scrolling rows on a phone (like constructions). */
+.palette {
+  grid-template-columns: repeat(11, 1fr);
+}
+.building-palette {
+  grid-template-columns: repeat(9, 1fr);
+}
+@media (orientation: portrait) {
+  .palette,
+  .building-palette {
+    grid-auto-flow: column;
+    grid-template-rows: repeat(2, 62px);
+    grid-template-columns: none;
+    grid-auto-columns: calc((100vw - 44px) / 3);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+}

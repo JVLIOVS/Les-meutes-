@@ -25,6 +25,8 @@ const fresh = () => ({
   music: true,
   mission: null,
   played: false,
+  best: 0,
+  arrestedTotal: 0,
 });
 function load() {
   try {
@@ -35,6 +37,8 @@ function load() {
       ...raw,
       completed: Array.from({ length: 6 }, (_, i) => clamp(Number(raw.completed?.[i]) || 0, 0, 3)),
       xp: Math.max(0, Number(raw.xp) || 0),
+      best: Math.max(0, Number(raw.best) || 0),
+      arrestedTotal: Math.max(0, Number(raw.arrestedTotal) || 0),
     };
   } catch {
     return fresh();
@@ -76,6 +80,19 @@ function saveMission() {
     persist();
   }
 }
+const heldCount = () => game.crowd.filter(p => p.state === 'held').length;
+/** Help bubble for a locked card: the whole chain of buildings still missing, then what it does. */
+function unlockHelp(type) {
+  const d = EQUIPMENT[type] ?? SERVICES[type],
+    chain = t => [...SERVICES[t].requires.flatMap(chain), t],
+    root = SERVICES[type] ? type : serviceFor(type);
+  const steps = root ? [...new Set(chain(root))].filter(t => t !== type && !game.service(t)) : [];
+  const parts = [];
+  if (steps.length) parts.push('bâtissez ' + steps.map(t => SERVICES[t].short).join(' → '));
+  if (type === 'helicopter' && (game.service('lab')?.tier ?? 0) < 2)
+    parts.push('améliorez le Centre aérien au niveau 2 (touchez-le sur la carte)');
+  return `${d.name} : ${parts.length ? parts.join(', puis ') + '. ' : ''}${d.desc}`;
+}
 function toast(text, duration = 2.8) {
   $('toast').textContent = text;
   $('toast').classList.add('show');
@@ -104,28 +121,13 @@ function home() {
   renderCampaign();
 }
 function renderCampaign() {
-  $('districts').replaceChildren();
-  for (const d of DISTRICTS) {
-    const b = document.createElement('button');
-    b.className = 'district' + (d.id === selectedLevel ? ' selected' : '');
-    b.style.setProperty('--accent', d.color);
-    b.disabled = !unlocked(d.id);
-    b.setAttribute('aria-pressed', String(d.id === selectedLevel));
-    b.setAttribute('aria-label', `${d.id + 1}. ${d.name}${b.disabled ? ' · verrouillé' : ''}`);
-    b.innerHTML = `<span class="district-n">0${d.id + 1}${b.disabled ? icon('lock') : icon(d.id > 2 ? 'shield' : 'city')}</span><b>${d.name}</b><small>${d.category}</small><span class="district-stars">${icon('star').repeat(save.completed[d.id])}</span>`;
-    b.onclick = () => {
-      selectedLevel = d.id;
-      renderCampaign();
-      sound.play('place');
-    };
-    $('districts').append(b);
-  }
-  const n = save.completed.filter(Boolean).length;
-  $('campaign-progress').textContent = `${n} / 6 QUARTIERS`;
+  // Survival by rounds replaces the six-map campaign: one city, rounds until the palace falls.
+  selectedLevel = 0;
+  document.querySelector('.campaign').hidden = true;
   $('home-progress').textContent =
-    `${DISTRICTS[selectedLevel].subtitle.toUpperCase()} · ${DISTRICTS[selectedLevel].waves} VAGUES · ${save.xp} XP`;
+    `SURVIE PAR MANCHES · RECORD : ${save.best ? 'MANCHE ' + save.best : 'À ÉTABLIR'} · ${save.arrestedTotal} INTERPELLÉS AU TOTAL`;
   $('resume').hidden = !save.mission;
-  $('start').innerHTML = `${save.played ? 'JOUER CE QUARTIER' : 'DÉFENDRE LA VILLE'} ${icon('arrow')}`;
+  $('start').innerHTML = `JOUER ${icon('arrow')}`;
 }
 function start(level, resume = false) {
   sound.unlock();
@@ -192,7 +194,7 @@ function renderPalette() {
       issue = constructing ? game.canBuild(type) : game.equipmentIssue(type),
       b = document.createElement('button');
     b.className = 'tool' + (actual === tool ? ' selected' : '');
-    b.disabled = constructing ? false : !!issue;
+    b.disabled = false;
     b.classList.toggle('locked-construction', constructing && !!issue && !existing);
     b.dataset.tool = actual;
     b.style.setProperty('--tool-color', d.color);
@@ -203,7 +205,12 @@ function renderPalette() {
     b.setAttribute('aria-pressed', String(actual === tool));
     b.title = issue || d.desc;
     b.innerHTML = `<span class="tool-top">${icon(d.icon)}<span class="price${issue ? ' locked' : ''}">${existing ? (existing.state === 'building' ? 'EN COURS' : 'NIV. ' + existing.tier) : issue && issue !== 'Budget insuffisant' ? 'REQUIS' : d.cost}</span></span><b>${d.short}</b><kbd>${i + 1}</kbd>`;
-    b.onclick = () => (existing ? showSelection({ type: 'service', id: existing.id }) : selectTool(actual));
+    b.onclick = () => {
+      if (existing) return showSelection({ type: 'service', id: existing.id });
+      // Locked cards stay tappable: they explain how to unlock them instead of doing nothing.
+      if (issue && issue !== 'Budget insuffisant') return toast(unlockHelp(type), 7);
+      selectTool(actual);
+    };
     $('palette').append(b);
   });
   updateDescription();
@@ -244,7 +251,9 @@ function updateHud() {
           : game.phase === 'wave'
             ? 'INTERVENTION EN COURS'
             : 'OPÉRATION TERMINÉE';
-  $('wave-text').textContent = `VAGUE ${Math.max(1, game.wave)} / ${game.def.waves}`;
+  $('wave-text').textContent = game.def.endless
+    ? `MANCHE ${Math.max(1, game.wave)}`
+    : `VAGUE ${Math.max(1, game.wave)} / ${game.def.waves}`;
   $('crowd-text').textContent =
     game.phase === 'wave'
       ? `${game.activeCrowd} dans la foule · ${game.units.length} unités`
@@ -257,10 +266,12 @@ function updateHud() {
   $('integrity-fill').style.width = game.integrity + '%';
   $('trust-fill').style.width = Math.max(0, game.trust) + '%';
   $('mission-objective').textContent =
-    `${game.builtCount} bâtiment${game.builtCount > 1 ? 's' : ''} · ${game.services.filter(s => s.state === 'empty').length} terrains libres · +${Math.round(game.income() * 60)} crédits / min en vague`;
+    `${game.builtCount} bâtiment${game.builtCount > 1 ? 's' : ''} · ${game.services.filter(s => s.state === 'empty').length} terrains libres · +${Math.round(game.income() * 60)} crédits / min · ${game.stats.arrested ?? 0} interpellés${heldCount() ? ` · ${heldCount()} à ramasser en fin de manche` : ''}`;
   $('launch').hidden = !['prepare', 'interval'].includes(game.phase);
   $('launch-label').textContent =
-    game.phase === 'interval' ? `VAGUE ${game.wave + 1} · ${Math.ceil(game.countdown)} s` : 'LANCER LA VAGUE';
+    game.phase === 'interval'
+      ? `MANCHE ${game.wave + 1} · ${Math.ceil(game.countdown)} s`
+      : 'LANCER LA MANCHE';
   $('launch-help').textContent =
     game.phase === 'interval'
       ? 'Touchez pour lancer maintenant'
@@ -344,7 +355,7 @@ function updateSelection(force = false) {
         : selected.type === 'service'
           ? (SERVICES[obj.type]?.name ?? 'Terrain à bâtir')
           : 'Barricade';
-  panel.innerHTML = `<div class="sel-head"><h3>${name}</h3><button class="close" aria-label="Fermer la sélection">✕</button></div><div class="sel-hp"><i style="width:${Math.max(0, (obj.hp / obj.maxHp) * 100)}%"></i></div><p>${Math.ceil(obj.hp)} / ${obj.maxHp} protection${selected.type === 'unit' ? ` · niveau ${obj.tier}` : selected.type === 'building' ? ` · renfort ${obj.protection}/3` : ''}</p><div class="sel-actions"></div>`;
+  panel.innerHTML = `<div class="sel-head"><h3>${name}</h3><button class="close" aria-label="Fermer la sélection">✕</button></div><div class="sel-hp"><i style="width:${Math.max(0, (obj.hp / obj.maxHp) * 100)}%"></i></div><p>${Math.ceil(obj.hp)} / ${obj.maxHp} protection${selected.type === 'unit' ? ` · niveau ${obj.tier} · touchez une rue pour l’y envoyer` : selected.type === 'building' ? ` · renfort ${obj.protection}/3` : ''}</p><div class="sel-actions"></div>`;
   panel.querySelector('.close').onclick = () => {
     selected = null;
     view.selected = null;
@@ -509,33 +520,24 @@ function pauseMenu() {
 function help() {
   const wasGame = mode === 'game';
   showOverlay(
-    `<p class="eyebrow">EMMET · MODE D’EMPLOI</p><h2>Votre ville, vos lignes.</h2><div class="help-steps"><div class="help-step"><i>${icon('squad')}</i><div><b>Rebâtissez vos services</b><span>Vous partez avec un seul bâtiment : le palais. Commandement, logements, commerces, secours et services aériens sont tous à bâtir. Chaque carte explique sa fonction.</span></div></div><div class="help-step"><i>${icon('city')}</i><div><b>Protégez les bâtiments</b><span>Les façades ont leur propre résistance : volets, grilles et périmètre. Touchez un bâtiment pour les améliorer ou réparer séparément sa façade et sa structure.</span></div></div><div class="help-step"><i>${icon('arrow')}</i><div><b>Gardez la main</b><span>Touchez une unité pour la déplacer ou l’améliorer. TENIR conserve les positions ; INTERCEPTER envoie les équipes au contact.</span></div></div><div class="help-step"><i>${icon('heart')}</i><div><b>Gardez la confiance</b><span>La médiation l’améliore. L’ordre renforcé, débloqué au rang 3, disperse plus vite mais l’épuise. À zéro, le commandement est relevé.</span></div></div></div><p>Glissez pour explorer, pincez ou utilisez + / − pour zoomer. Le centre aérien niveau 2 ouvre l’hélicoptère de soutien. Sur ordinateur : touches 1–9, P pour pause, Entrée pour lancer une vague.</p><div class="overlay-actions"><button class="primary" id="help-close">${wasGame ? 'REPRENDRE' : 'COMPRIS'} ${icon('arrow')}</button></div>`,
+    `<p class="eyebrow">EMMET · MODE D’EMPLOI</p><h2>Votre ville, vos lignes.</h2><div class="help-steps"><div class="help-step"><i>${icon('squad')}</i><div><b>Tenez le plus de manches</b><span>Les manches s’enchaînent et durcissent ; la partie s’arrête quand le palais tombe. Les personnes interpellées sont ramassées par les fourgons en fin de manche. Vous partez avec un seul bâtiment : le palais. Commandement, logements, commerces, secours et services aériens sont tous à bâtir. Chaque carte explique sa fonction.</span></div></div><div class="help-step"><i>${icon('city')}</i><div><b>Protégez les bâtiments</b><span>Les façades ont leur propre résistance : volets, grilles et périmètre. Touchez un bâtiment pour les améliorer ou réparer séparément sa façade et sa structure.</span></div></div><div class="help-step"><i>${icon('arrow')}</i><div><b>Gardez la main</b><span>Touchez une unité, puis une rue : elle y va. TENIR conserve les positions ; INTERCEPTER envoie les équipes au contact. Une carte grisée se touche aussi : elle explique comment la débloquer.</span></div></div><div class="help-step"><i>${icon('heart')}</i><div><b>Gardez la confiance</b><span>La médiation l’améliore. L’ordre renforcé, débloqué au rang 3, disperse plus vite mais l’épuise. À zéro, le commandement est relevé.</span></div></div></div><p>Glissez pour explorer, pincez ou utilisez + / − pour zoomer. Le centre aérien niveau 2 ouvre l’hélicoptère de soutien. Sur ordinateur : touches 1–9, P pour pause, Entrée pour lancer une vague.</p><div class="overlay-actions"><button class="primary" id="help-close">${wasGame ? 'REPRENDRE' : 'COMPRIS'} ${icon('arrow')}</button></div>`,
     card => (card.querySelector('#help-close').onclick = () => closeOverlay(wasGame))
   );
 }
 function result() {
   save.mission = null;
-  let xp = 0;
-  if (game.phase === 'won') {
-    const previous = save.completed[game.level];
-    save.completed[game.level] = Math.max(previous, game.stars);
-    xp = previous === 0 ? game.def.xp : Math.max(10, (game.stars - previous) * 30);
-    save.xp += xp;
-  }
+  const reached = Math.max(1, game.wave),
+    record = reached > save.best;
+  save.best = Math.max(save.best, reached);
+  save.arrestedTotal += game.stats.arrested ?? 0;
   persist();
-  const won = game.phase === 'won',
-    next = game.level < 5;
+  const causes = game.debrief();
   showOverlay(
-    `<p class="eyebrow">${game.def.name.toUpperCase()} · BILAN</p><h2>${won ? 'Le quartier tient.' : 'Le périmètre a cédé.'}</h2><div class="result-stars">${Array.from({ length: 3 }, (_, i) => `<span style="opacity:${i < game.stars ? 1 : 0.15}">${icon('star')}</span>`).join('')}</div><p>${game.reason}</p><div class="result-stats"><div><b>${Math.round(game.integrity)}%</b><span>PALAIS PRÉSERVÉ</span></div><div><b>${game.stats.dispersed}</b><span>DISPERSIONS</span></div><div><b>${Math.round(game.trust)}%</b><span>CONFIANCE</span></div></div>${
-      game.debrief().length
-        ? `<ul class="debrief">${game
-            .debrief()
-            .map(line => `<li>${line}</li>`)
-            .join('')}</ul>`
-        : ''
-    }<p>${won ? `+${xp} XP · ${next ? 'Le quartier suivant est accessible.' : 'Les six quartiers ont tenu.'}` : 'Relancez : la vague annoncée sera la même.'}</p><div class="overlay-actions"><button class="primary" id="result-next">${won && next ? 'QUARTIER SUIVANT' : 'REJOUER'} ${icon('arrow')}</button><button class="secondary" id="result-home">CAMPAGNE</button></div>`,
+    `<p class="eyebrow">${game.def.name.toUpperCase()} · BILAN</p><h2>${record ? 'Nouveau record.' : 'Le palais est tombé.'}</h2><p>${game.reason}</p><div class="result-stats"><div><b>${reached}</b><span>MANCHE ATTEINTE</span></div><div><b>${game.stats.arrested ?? 0}</b><span>INTERPELLÉS</span></div><div><b>${save.best}</b><span>RECORD</span></div></div>${
+      causes.length ? `<ul class="debrief">${causes.map(line => `<li>${line}</li>`).join('')}</ul>` : ''
+    }<div class="overlay-actions"><button class="primary" id="result-next">REJOUER ${icon('arrow')}</button><button class="secondary" id="result-home">ACCUEIL</button></div>`,
     card => {
-      card.querySelector('#result-next').onclick = () => start(won && next ? game.level + 1 : game.level);
+      card.querySelector('#result-next').onclick = () => start(0);
       card.querySelector('#result-home').onclick = home;
     }
   );
@@ -551,7 +553,7 @@ function events() {
       saveMission();
       sound.play('wave');
     } else if (e.type === 'wave') {
-      toast(`Vague ${game.wave} : les rassemblements arrivent.`, 3);
+      toast(`${game.def.endless ? 'Manche' : 'Vague'} ${game.wave} : les rassemblements arrivent.`, 3);
       sound.play('wave');
     } else if (e.type === 'clear') {
       toast(`Vague contenue · +${game.waveReward()} crédits`, 3);
@@ -695,6 +697,18 @@ canvas.addEventListener('pointerup', e => {
       sound.play('place');
       saveMission();
     } else toast('Choisissez une rue pour déplacer cette unité.');
+    return;
+  }
+  if (
+    !tool &&
+    selected?.type === 'unit' &&
+    pick.type !== 'unit' &&
+    road(Math.round(ground.x), Math.round(ground.y))
+  ) {
+    if (game.moveUnit(selected.id, ground.x, ground.y)) {
+      sound.play('place');
+      saveMission();
+    }
     return;
   }
   if (tool?.startsWith('build:')) {

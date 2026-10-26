@@ -105,11 +105,11 @@ export const strategies = {
   },
 };
 /** Plays a whole mission with one strategy; the strategy acts once at the start of each preparation. */
-export function play(name, seed = 71, level = 0) {
+export function play(name, seed = 71, level = 0, rounds = 3) {
   const g = new CityGame(level, seed);
   let prepared = -1;
   const log = [];
-  for (let i = 0; i < 30 * 900 && !['won', 'lost'].includes(g.phase); i++) {
+  for (let i = 0; i < 30 * 1800 && !['won', 'lost'].includes(g.phase) && g.wave <= rounds; i++) {
     if (['prepare', 'interval'].includes(g.phase) && prepared !== g.wave) {
       log.push(`w${g.wave}:$${Math.round(g.money)} pal${Math.round(g.primary.hp)}`);
       prepared = g.wave;
@@ -121,7 +121,7 @@ export function play(name, seed = 71, level = 0) {
   return {
     name,
     seed,
-    phase: g.phase,
+    phase: ['won', 'lost'].includes(g.phase) ? g.phase : g.wave > rounds ? 'survived' : g.phase,
     wave: g.wave,
     stars: g.stars,
     money: Math.round(g.money),

@@ -1,5 +1,5 @@
 /** Single source for the displayed revision and the build's cache-busting query. */
-export const REVISION = '05';
+export const REVISION = '06';
 /** Continuous income per service tier and second, paid during waves and lulls (never while preparing). */
 export const INCOME = { housing: 0.8, market: 1.4, civic: 0.6 };
 export const LULL = 25;
@@ -10,15 +10,17 @@ export const EDGE_MIN = -7,
 export const DISTRICTS = [
   {
     id: 0,
-    name: 'Les Lisières',
-    subtitle: 'Mission témoin',
-    category: 'HABITATIONS',
+    name: 'Nacreville',
+    subtitle: 'Survie par manches',
+    category: 'SURVIE',
     color: '#a9d8c2',
-    waves: 3,
+    // Endless: rounds follow one another until the palace falls. The score is the round reached.
+    waves: Infinity,
+    endless: true,
     base: 24,
     budget: 320,
-    objective: 'Un palais, 320 crédits. Bâtissez, lisez les rues, tenez trois vagues très différentes.',
-    // Hand-written waves: one street, then a fork, then two fronts. Other districts use the formula.
+    objective: 'Un palais, 320 crédits. Tenez le plus de manches possible.',
+    // Hand-written opening (one street, a fork, two fronts), then escalateRound() takes over.
     plan: [
       { gates: [0], count: 18 },
       { gates: [0, 1], count: 30 },

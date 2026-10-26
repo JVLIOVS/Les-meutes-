@@ -1,6 +1,6 @@
 # EMMET — mémo pour Claude Code
 
-Jeu solo web de construction + défense urbaine par vagues, en français. JS natif, Canvas 2D isométrique, aucun backend, aucune dépendance runtime. Distinct de STREETZ (monde ouvert, clans, loot) : ne pas importer ces idées.
+Jeu solo web de construction + défense urbaine en **survie par manches** (sans fin, score = manche atteinte, record local), en français. JS natif, Canvas 2D isométrique, aucun backend, aucune dépendance runtime. Distinct de STREETZ (monde ouvert, clans, loot) : ne pas importer ces idées.
 
 ## Commandes
 - `npm test` : règles (Node seul, ~10 s). Doit rester vert.
@@ -17,10 +17,10 @@ Jeu solo web de construction + défense urbaine par vagues, en français. JS nat
 
 ## Invariants à ne pas casser
 - Nouvelle partie = palais seul, zéro troupe, neuf terrains vides. Ne pas réimposer de bâtiments.
-- Mission témoin (quartier 0) : 320 crédits ; `lines` et `fortress` gagnent, `passive` perd (3 graines).
+- Mode joué = quartier 0 « Nacreville » (`endless`) : 320 crédits, 3 manches écrites puis `escalateRound()` (plus de monde, 2→3→4 portes) et profils débloqués par manche (`ROUND_UNLOCKS`). `lines` et `fortress` tiennent 3 manches, `passive` tombe (3 graines). Les quartiers 1–5 restent dans le code mais ne sont plus proposés.
 - Pas de revenu pendant la préparation (sinon attendre devient une stratégie).
 - Aucune attaque de foule ne touche drone/hélico (`airborne`).
-- Contact sol ou marque drone = interpellation (`held`) → fourgons (`updateArrests`), +4/personne livrée. Eau/médiation/filets = dispersion sans prime. Les `held` ne comptent jamais comme foule active.
+- Contact sol ou marque drone = interpellation (`held`) → fourgons **uniquement pendant l'accalmie** (`updateArrests`, un fourgon par tas, 8 max), +4/personne livrée au poste. Eau/médiation/filets = dispersion sans prime. Les `held` ne comptent jamais comme foule active.
 - Fumigène et barrages passent par la carte de flux : tout ce qui ferme une rue doit appeler `clearRoutes()`.
 - Une vague ne finit jamais par minuterie ; aucun gel (test de fumée sur les 6 quartiers).
 - Prise du palais : 4,8 s, foule réellement à l'intérieur, sans violence graphique. Pays et dirigeant fictifs, pas d'arme létale.

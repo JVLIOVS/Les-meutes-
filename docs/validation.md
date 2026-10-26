@@ -1,3 +1,20 @@
+# Validation — V06 · Survie par manches
+
+26 octobre 2026. 35 tests Node passent.
+
+| Livré | Preuve |
+| --- | --- |
+| Survie par manches (remplace les 6 cartes) : la partie ne s'arrête que quand le palais tombe ; score = manche atteinte, record et total d'interpellés sauvegardés | Test (jamais de victoire, escalade portes et profils). Simulation : passif tombe manche 2-3, stratégies scriptées manche 4-7. |
+| Fourgons en fin de manche : un par tas d'interpellés, ramenés au poste (+4 chacun, message de livraison) | Tests (aucun fourgon pendant la manche ; cycle complet dans l'accalmie). |
+| Compteur d'interpellés et de personnes à ramasser dans le bandeau | Navigateur. |
+| Aide : une carte verrouillée explique toute la chaîne de déblocage (ex. hélicoptère) | Navigateur : texte affiché pour l'hélico. |
+| Déplacement : toucher l'unité puis la rue ; troupes plus rapides (2 cases/s au lieu de 1,4) | Navigateur : ordre reçu. |
+| Palette mobile à 11 interventions : deux lignes défilantes | Capture 390 × 844. |
+
+Limite connue : sur téléphone, le panneau d'une unité sélectionnée recouvre le bouton LANCER (fermer la sélection d'abord).
+
+---
+
 # Validation — V05 · Interpellations et nouvel arsenal
 
 26 octobre 2026. 34 tests Node passent.
