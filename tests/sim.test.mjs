@@ -381,6 +381,7 @@ test('a lost command post does not freeze the lull: the next wave still comes', 
   g.damageBuilding(c, 9999);
   for (let i = 0; i < 30 * 400 && g.phase === 'wave'; i++) g.update(1 / 30);
   assert.equal(g.phase, 'interval');
+  g.pickCard(g.draft.cards[0]);
   step(g, 26);
   assert.equal(g.wave, 2);
 });
@@ -591,4 +592,74 @@ test('the helicopter spotlight blocks crowd skills and it drops a net on the den
   assert.ok(s.exposed > g.time);
   assert.equal(g.fields.length, nets + 1);
   assert.equal(g.fields.at(-1).type, 'net');
+});
+
+// V07 — replay loop: card draft, grades, daily seed, combos.
+test('clearing a round offers distinct cards and freezes the lull until one is picked', () => {
+  const g = funded();
+  build(g, 'command');
+  g.startWave();
+  g.rallies = [];
+  g.update(1 / 30);
+  assert.equal(g.phase, 'interval');
+  assert.equal(new Set(g.draft.cards).size, 3);
+  const countdown = g.countdown;
+  step(g, 5);
+  assert.equal(g.countdown, countdown, 'the lull waits for the choice');
+  assert.equal(g.startWave(), false);
+  assert.ok(g.pickCard(g.draft.cards[0]));
+  assert.equal(g.draft, null);
+  step(g, 1);
+  assert.ok(g.countdown < countdown);
+});
+test('cards change the rules they promise', () => {
+  const g = funded();
+  build(g, 'command');
+  const card = id => {
+    g.draft = { cards: [id], rerolls: 0 };
+    assert.ok(g.pickCard(id), id);
+  };
+  const before = g.costOf('patrol');
+  card('surplus');
+  assert.equal(g.costOf('patrol'), Math.round(before * 0.8));
+  const crowd = g.wavePlan(4).reduce((n, w) => n + w.count, 0);
+  card('gamble');
+  assert.ok(g.wavePlan(4).reduce((n, w) => n + w.count, 0) > crowd);
+  assert.equal(g.waveReward(), Math.round(150 * 1.6));
+  const units = g.units.length;
+  card('reinforcement');
+  assert.equal(g.units.length, units + 1);
+  card('shutters');
+  assert.equal(g.primary.protection, 1);
+  assert.deepEqual(g.perks, ['surplus', 'gamble', 'reinforcement', 'shutters']);
+});
+test('grades: more credits, a fourth card, a reroll and an opening card', () => {
+  assert.equal(new CityGame(0, 71, { grade: 1 }).money, new CityGame().money + 60);
+  const g = new CityGame(0, 71, { grade: 4 });
+  assert.equal(g.draft.cards.length, 4, 'opening card offered before round one');
+  const first = [...g.draft.cards];
+  assert.ok(g.rerollCards());
+  assert.equal(g.rerollCards(), false, 'one reroll only');
+  assert.notDeepEqual(g.draft.cards, first);
+});
+test('the same seed deals the same cards (fair daily challenge), and saves keep the run', () => {
+  const a = new CityGame(0, 20261027, { grade: 4, daily: true }),
+    b = new CityGame(0, 20261027, { grade: 4, daily: true });
+  assert.deepEqual(a.draft.cards, b.draft.cards);
+  a.pickCard(a.draft.cards[0]);
+  const r = CityGame.restore(JSON.parse(JSON.stringify(a.snapshot())));
+  assert.deepEqual(r.perks, a.perks);
+  assert.deepEqual(r.mods, a.mods);
+  assert.equal(r.opts.daily, true);
+});
+test('quick arrests build a rafle combo', () => {
+  const g = funded();
+  build(g, 'command');
+  g.startWave();
+  for (let i = 0; i < 4; i++) g.hit(marcher(g, 9, 15, { hp: 1 }), 5, { type: 'patrol' });
+  assert.equal(g.combo.count, 4);
+  g.time += 3;
+  g.hit(marcher(g, 9, 15, { hp: 1 }), 5, { type: 'patrol' });
+  assert.equal(g.combo.count, 1);
+  assert.equal(g.combo.best, 4);
 });

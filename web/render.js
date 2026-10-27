@@ -12,9 +12,9 @@ import {
   SPAN,
 } from './data.js';
 const mix = (hex, f) => {
-  const n = parseInt(hex.slice(1), 16),
+  const n = parseInt(hex.slice(1, 7), 16),
     v = [n >> 16, (n >> 8) & 255, n & 255].map(x => clamp(Math.round(x * f), 0, 255));
-  return `rgb(${v.join(',')})`;
+  return '#' + v.map(x => x.toString(16).padStart(2, '0')).join('');
 };
 export class CityRenderer {
   constructor(canvas) {
@@ -103,9 +103,15 @@ export class CityRenderer {
       B = this.point(x + w / 2, y - d / 2, h + base),
       C = this.point(x + w / 2, y + d / 2, h + base),
       D = this.point(x - w / 2, y + d / 2, h + base);
-    this.poly([dd, cc, C, D], mix(color, 0.73));
-    this.poly([b, cc, C, B], mix(color, 0.53));
-    this.poly([A, B, C, D], roof, '#d9e3de23', 0.7);
+    // Night: faces in shadow, the roof outlined in the building's own colour like a neon tube.
+    this.poly([dd, cc, C, D], mix(color, 0.34));
+    this.poly([b, cc, C, B], mix(color, 0.22));
+    this.poly(
+      [A, B, C, D],
+      mix(roof.slice(0, 7), 0.42),
+      roof.slice(0, 7) + 'aa',
+      Math.max(1, this.tile * 0.05)
+    );
   }
   ellipse(x, y, rx, ry, fill, stroke) {
     const c = this.ctx;
@@ -152,14 +158,14 @@ export class CityRenderer {
       w = this.width,
       h = this.height,
       g = c.createRadialGradient(w * 0.65, h * 0.35, 0, w * 0.5, h * 0.5, w * 0.8);
-    g.addColorStop(0, '#1b3544');
-    g.addColorStop(0.55, '#101f2c');
-    g.addColorStop(1, '#09141f');
+    g.addColorStop(0, '#1d1640');
+    g.addColorStop(0.55, '#0c0f24');
+    g.addColorStop(1, '#05060f');
     c.fillStyle = g;
     c.fillRect(0, 0, w, h);
     c.save();
-    c.globalAlpha = 0.1;
-    c.strokeStyle = '#91bec6';
+    c.globalAlpha = 0.035;
+    c.strokeStyle = '#7a5cff';
     c.lineWidth = 0.6;
     for (let x = -h; x < w + h; x += 58) {
       c.beginPath();
@@ -193,12 +199,12 @@ export class CityRenderer {
   }
   ground(game) {
     const c = this.ctx;
-    this.prism(9, 9, 33.6, 33.6, 0.15, '#294d48', '#638572', -0.2);
+    this.prism(9, 9, 33.6, 33.6, 0.15, '#0d1426', '#111a2e', -0.2);
     for (let x = EDGE_MIN; x <= EDGE_MAX; x++)
       for (let y = EDGE_MIN; y <= EDGE_MAX; y++) {
         if (x >= 0 && y >= 0 && x < 19 && y < 19) continue;
         const isRoad = road(x, y);
-        this.tileShape(x, y, 0.99, 0.99, -0.04, isRoad ? '#55666c' : (x + y) % 3 ? '#688874' : '#6e9078');
+        this.tileShape(x, y, 0.99, 0.99, -0.04, isRoad ? '#1b2238' : (x + y) % 3 ? '#0f1729' : '#111b2f');
         if (!isRoad && (x * 13 + y * 7) % 29 === 0) this.tree(x, y, 0.7);
       }
     const bottom = [
@@ -207,31 +213,31 @@ export class CityRenderer {
       this.point(18.8, 18.8, -0.6),
       this.point(-0.8, 18.8, -0.6),
     ];
-    this.poly(bottom, '#07131c', '#355461', 1);
-    this.prism(9, 9, 19.6, 19.6, 0.35, '#345462', '#37525c', -0.35);
+    this.poly(bottom, '#04060e', '#2b3a7a', 1);
+    this.prism(9, 9, 19.6, 19.6, 0.35, '#1a2140', '#161d36', -0.35);
     for (let x = 0; x < SIZE; x++)
       for (let y = 0; y < SIZE; y++) {
         const r = road(x, y),
           color = r
             ? (x + y) % 2
-              ? '#586672'
-              : '#54636f'
+              ? '#1d2540'
+              : '#1b233c'
             : (x * 7 + y * 11) % 4 === 0
-              ? '#839c90'
-              : '#7d958a';
+              ? '#172036'
+              : '#141c31';
         this.tileShape(x, y, 0.99, 0.99, 0, color);
         if (r) {
           if ((x === 3 || x === 9 || x === 15) && y % 3 === 1) {
             const a = this.point(x, y - 0.2, 0.01),
               b = this.point(x, y + 0.2, 0.01);
-            this.line(a, b, '#c9d2c255', Math.max(1, this.tile * 0.035));
+            this.line(a, b, '#3fe0ff99', Math.max(1, this.tile * 0.04));
           }
           if ((y === 3 || y === 9 || y === 15) && x % 3 === 1)
             this.line(
               this.point(x - 0.2, y, 0.01),
               this.point(x + 0.2, y, 0.01),
-              '#c9d2c255',
-              Math.max(1, this.tile * 0.035)
+              '#3fe0ff99',
+              Math.max(1, this.tile * 0.04)
             );
         }
       }
@@ -239,8 +245,8 @@ export class CityRenderer {
     for (const x of [3, 9, 15])
       for (const y of [3, 9, 15])
         for (let i = 0; i < 4; i++) {
-          this.tileShape(x - 0.38 + i * 0.25, y + 0.72, 0.12, 0.4, 0.03, '#d5ddcd99');
-          this.tileShape(x + 0.72, y - 0.38 + i * 0.25, 0.4, 0.12, 0.03, '#d5ddcd99');
+          this.tileShape(x - 0.38 + i * 0.25, y + 0.72, 0.12, 0.4, 0.03, '#ff4fb4aa');
+          this.tileShape(x + 0.72, y - 0.38 + i * 0.25, 0.4, 0.12, 0.03, '#ff4fb4aa');
         }
     for (const g of GATES) {
       const p = this.point(g.x, g.y);
@@ -258,8 +264,8 @@ export class CityRenderer {
       [1, 6],
       [11, 1],
     ]) {
-      this.tileShape(x, y, 1.5, 1.5, 0.01, '#adc0af');
-      this.ring(x, y, 0.45, '#647f7d', 0.4);
+      this.tileShape(x, y, 1.5, 1.5, 0.01, '#1f2a4a');
+      this.ring(x, y, 0.45, '#7a5cff', 0.6);
     }
   }
   building(b, level, game) {
@@ -429,9 +435,9 @@ export class CityRenderer {
     this.prism(x, y, 0.1, 0.1, 0.8 * s, '#5b6557', '#7c8067');
     const a = this.point(x, y, 0.95 * s),
       r = this.tile * 0.32 * s;
-    this.ellipse(a.x, a.y, r, r * 1.1, '#4e8173');
-    this.ellipse(a.x - r * 0.2, a.y - r * 0.2, r * 0.75, r * 0.85, '#76a28a');
-    this.ellipse(a.x - r * 0.34, a.y - r * 0.45, r * 0.25, r * 0.32, '#9abe9a');
+    this.ellipse(a.x, a.y, r, r * 1.1, '#11303a');
+    this.ellipse(a.x - r * 0.2, a.y - r * 0.2, r * 0.75, r * 0.85, '#174552');
+    this.ellipse(a.x - r * 0.34, a.y - r * 0.45, r * 0.25, r * 0.32, '#2fd0c055');
   }
   streetProps(game) {
     for (const [x, y] of [
@@ -786,7 +792,27 @@ export class CityRenderer {
       }
       c.restore();
     }
+    // Rafle combo: big counter where the last arrest happened, while the streak is alive.
+    const combo = game.combo;
+    if (combo?.count >= 3 && game.time < combo.until) {
+      const q = this.point(combo.x, combo.y, 1.6),
+        pop = 1 + Math.max(0, combo.until - game.time - 2.2) * 1.5;
+      c.save();
+      c.shadowColor = '#5aa8ff';
+      c.shadowBlur = this.tile * 0.8;
+      this.text(`RAFLE ×${combo.count}`, q.x, q.y, clamp(this.tile * 0.5 * pop, 12, 26), '#dff0ff', '900');
+      c.restore();
+    }
     for (const e of game.effects) {
+      if (e.kind === 'gain') {
+        const age = game.time - e.born,
+          q = this.point(e.x, e.y, 1 + age * 1.2);
+        c.save();
+        c.globalAlpha = 1 - clamp(age / 1.1, 0, 1);
+        this.text(`+${e.amount}`, q.x, q.y, clamp(this.tile * 0.42, 11, 20), e.color, '900');
+        c.restore();
+        continue;
+      }
       const age = game.time - e.born,
         t = clamp(age / 1.1, 0, 1),
         p = this.point(e.x, e.y, ['smash', 'shatter'].includes(e.kind) ? 0.9 : 0.35);
@@ -917,6 +943,7 @@ export class CityRenderer {
       });
     this.drawables.sort((a, b) => a.depth - b.depth);
     for (const item of this.drawables) item.draw();
+    this.lights(game);
     this.telegraph(game);
     this.effects(game);
     this.builders(game);
@@ -941,6 +968,53 @@ export class CityRenderer {
     }
     c.restore();
   }
+  /** Additive light layer: lamps, service signs, police glow, beacons, helicopter beam, crowd haze. */
+  lights(game) {
+    const c = this.ctx,
+      glow = (x, y, z, r, color, alpha) => {
+        const p = this.point(x, y, z),
+          rad = r * this.tile,
+          g = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+        g.addColorStop(0, color);
+        g.addColorStop(1, '#00000000');
+        c.globalAlpha = alpha;
+        c.fillStyle = g;
+        c.fillRect(p.x - rad, p.y - rad, rad * 2, rad * 2);
+      };
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const x of [3, 9, 15]) for (const y of [3, 9, 15]) glow(x + 0.6, y + 0.6, 0, 2.2, '#ffb36b', 0.22);
+    for (const s of game.services ?? [])
+      if (s.state === 'built') glow(s.x, s.y, 2, 2.4, SERVICES[s.type].color, 0.35);
+    const palace = game.primary;
+    if (palace?.hp > 0) glow(palace.x, palace.y, 2.5, 4, '#ffd27a', 0.3 + Math.sin(this.t * 2) * 0.04);
+    for (const u of game.units) {
+      glow(u.x, u.y, 0.3, 1.3, '#3aa0ff', 0.4);
+      if (u.type === 'helicopter') {
+        const sweep = Math.sin(this.t * 0.9) * 0.6;
+        glow(u.x + sweep, u.y - sweep, 0, 2.6, '#f4fbff', 0.45);
+      }
+    }
+    for (const v of game.vans ?? [])
+      glow(v.x, v.y, 0.6, 1.8, Math.floor(this.t * 6) % 2 ? '#ff3b5c' : '#3b7bff', 0.7);
+    for (const d of game.decoys ?? []) glow(d.x, d.y, 0.5, 3, '#ff4fb4', 0.4 + Math.sin(this.t * 6) * 0.15);
+    let n = 0;
+    for (const p of game.crowd)
+      if (p.state === 'march' && n++ % 2 === 0) glow(p.x, p.y, 0.4, 0.9, '#ff8a3d', 0.22);
+    c.restore();
+    // Vignette pulls the eye to the city centre.
+    const w = this.width,
+      h = this.height,
+      v = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
+    v.addColorStop(0, '#00000000');
+    v.addColorStop(1, '#000000aa');
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.scale(this.canvas.width / w, this.canvas.height / h);
+    c.fillStyle = v;
+    c.fillRect(0, 0, w, h);
+    c.restore();
+  }
   /** Announces what is coming: gates and headcount before a wave, route and contact time while rallying. */
   telegraph(game) {
     const size = clamp(this.tile * 0.27, 7, 10),
@@ -950,7 +1024,14 @@ export class CityRenderer {
         const g = GATES[gate],
           p = this.point(g.x, g.y, 1);
         this.ring(g.x, g.y, 1.1 + Math.sin(this.t * 2) * 0.06, '#efb395', 0.45);
-        this.text(`VAGUE ${game.wave + 1} · ${count}`, p.x, p.y - 15, size, '#f1c5a8', '800');
+        this.text(
+          `${game.def.endless ? 'MANCHE' : 'VAGUE'} ${game.wave + 1} · ${count}`,
+          p.x,
+          p.y - 15,
+          size,
+          '#f1c5a8',
+          '800'
+        );
       }
     for (const r of game.rallies) {
       const target = game.targets.find(b => b.id === r.target),

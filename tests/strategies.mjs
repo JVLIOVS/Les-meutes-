@@ -1,6 +1,6 @@
 // Reference strategies for the mission témoin (district 0). Used by tests and balance checks.
 import { CityGame } from '../web/sim.js';
-import { SERVICES } from '../web/data.js';
+import { SERVICES, CARDS } from '../web/data.js';
 const step = (g, s) => {
   for (let i = 0; i < Math.ceil(s * 30); i++) g.update(1 / 30);
 };
@@ -116,6 +116,8 @@ export function play(name, seed = 71, level = 0, rounds = 3) {
       strategies[name](g, g.wave);
       if (g.phase === 'prepare') g.startWave();
     }
+    // Card draft: a plain, deterministic policy (prefer immediate help, never bets).
+    if (g.draft) g.pickCard(g.draft.cards.find(c => CARDS[c].kind !== 'risk') ?? g.draft.cards[0]);
     g.update(1 / 30);
   }
   return {
@@ -130,5 +132,6 @@ export function play(name, seed = 71, level = 0, rounds = 3) {
     disp: g.stats.dispersed,
     log: log.join(' '),
     debrief: g.debrief(),
+    perks: g.perks,
   };
 }

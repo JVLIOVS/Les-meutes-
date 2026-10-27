@@ -26,6 +26,10 @@ Jeu solo web de construction + défense urbaine en **survie par manches** (sans 
 - Prise du palais : 4,8 s, foule réellement à l'intérieur, sans violence graphique. Pays et dirigeant fictifs, pas d'arme létale.
 - Sauvegardes : rester compatible schéma 1–3 (champs nouveaux avec valeurs par défaut).
 
+- Boucle de rejeu : à chaque manche tenue, tirage de cartes (`CARDS`, `offerCards`/`pickCard`) qui **gèle l'accalmie** jusqu'au choix ; effets via `this.mods` uniquement. Grades permanents (`GRADES`, XP locale). Défi du jour = graine = date (mêmes manches et cartes pour tous). Le tirage utilise le RNG de la partie : ne pas l'appeler ailleurs sans raison.
+- Direction artistique : **nuit néon** (sol sombre, arêtes de toit lumineuses, couche additive `lights()`). Garder la lisibilité : la foule reste orange, la police bleue.
+- Cibles : App Store et Google Play via Capacitor (prochaine étape). Sécurité : tout le code embarqué, aucun chargement distant, pas d'`eval`, pas de SDK de traçage.
+
 ## Méthode (économie de tokens)
 - Lire ce fichier, pas le dossier de reprise complet (`EMMET_DOSSIER_REPRISE_CLAUDE_CODE.md`, historique).
 - Prouver par test ou par simulation (`tests/strategies.mjs`) avant de régler l'équilibrage à l'œil.

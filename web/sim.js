@@ -16,6 +16,7 @@ import {
   EDGE_MAX,
   ARMOR,
   INCOME,
+  CARDS,
   LULL,
 } from './data.js';
 export class Rng {
@@ -159,7 +160,9 @@ export function descend(field, from) {
   return result;
 }
 export class CityGame {
-  constructor(level = 0, seed = 71) {
+  /** opts: { grade } from the player's permanent progression; { daily } for the daily challenge. */
+  constructor(level = 0, seed = 71, opts = {}) {
+    this.opts = { grade: 0, daily: false, ...opts };
     this.level = clamp(level, 0, 5);
     this.def = DISTRICTS[this.level];
     this.rng = new Rng(seed + level * 101);
@@ -200,6 +203,23 @@ export class CityGame {
     };
     this.vans = [];
     this.decoys = [];
+    // Run modifiers bought with cards; every rule that a card touches reads from here.
+    this.mods = {
+      income: 1,
+      reward: 1,
+      arrestPay: 0,
+      ground: 1,
+      unitCost: 1,
+      crowd: 1,
+      crowdSpeed: 1,
+      impulse: 8,
+      tactical: 1,
+    };
+    this.perks = [];
+    this.draft = null;
+    this.combo = { count: 0, until: 0, x: 0, y: 0 };
+    if (this.opts.grade >= 1) this.money += 60;
+    if (this.opts.grade >= 4) this.offerCards();
     this.selected = null;
     this.reason = '';
   }
@@ -219,11 +239,105 @@ export class CityGame {
     );
   }
   waveReward() {
-    return 150 + this.wave * 40;
+    return Math.round((150 + this.wave * 40) * this.mods.reward);
+  }
+  /** Price after card discounts (units, then smoke and decoy). */
+  costOf(type) {
+    const d = EQUIPMENT[type];
+    if (!d) return Infinity;
+    const factor = d.unit ? this.mods.unitCost : ['smoke', 'decoy'].includes(type) ? this.mods.tactical : 1;
+    return Math.round(d.cost * factor);
+  }
+  /** Draft: three (four from grade 2) distinct cards, drawn from the seeded RNG so a daily run is fair. */
+  offerCards() {
+    const pool = Object.keys(CARDS),
+      size = this.opts.grade >= 2 ? 4 : 3,
+      hand = [];
+    while (hand.length < size) {
+      const id = pool[Math.floor(this.rng.next() * pool.length)];
+      if (!hand.includes(id)) hand.push(id);
+    }
+    this.draft = { cards: hand, rerolls: this.opts.grade >= 3 ? 1 : 0 };
+    return hand;
+  }
+  rerollCards() {
+    if (!this.draft?.rerolls) return false;
+    const left = this.draft.rerolls - 1;
+    this.offerCards();
+    this.draft.rerolls = left;
+    return true;
+  }
+  pickCard(id) {
+    if (!this.draft?.cards.includes(id)) return false;
+    const m = this.mods,
+      palace = this.primary;
+    ({
+      treasury: () => (this.money += 150),
+      commerce: () => (m.income *= 1.5),
+      bounty: () => (m.arrestPay += 3),
+      drill: () => (m.ground *= 1.3),
+      surplus: () => (m.unitCost *= 0.8),
+      reinforcement: () => {
+        const id = this.nextId++;
+        this.units.push({
+          id,
+          type: 'patrol',
+          x: 15,
+          y: 13,
+          hp: 150,
+          maxHp: 150,
+          tier: 1,
+          born: this.time,
+          cooldown: 0,
+          path: [],
+          goal: { x: 15, y: 13 },
+          flash: 0,
+          heading: 0,
+        });
+      },
+      masonry: () => {
+        for (const b of this.targets) b.hp = b.maxHp;
+      },
+      shutters: () => {
+        if ((palace.protection ?? 0) < 3) {
+          palace.protection = (palace.protection ?? 0) + 1;
+          palace.armorMax = ARMOR[palace.protection];
+          palace.armorHp = palace.armorMax;
+        }
+      },
+      speech: () => (this.trust = Math.min(100, this.trust + 15)),
+      curfew: () => (m.crowdSpeed *= 0.9),
+      quickpulse: () => (m.impulse = 4),
+      smokes: () => (m.tactical *= 0.5),
+      gamble: () => {
+        m.reward *= 1.6;
+        m.crowd *= 1.25;
+      },
+      loan: () => {
+        this.money += 300;
+        m.crowd *= 1.15;
+      },
+    })[id]();
+    this.perks.push(id);
+    this.draft = null;
+    this.emit('card', { id });
+    return true;
+  }
+  /** Arrests in quick succession build a "rafle" combo (purely feedback, shown on the map). */
+  noteArrest(p) {
+    const c = this.combo;
+    c.count = this.time < c.until ? c.count + 1 : 1;
+    c.until = this.time + 2.5;
+    c.x = p.x;
+    c.y = p.y;
+    c.best = Math.max(c.best ?? 0, c.count);
   }
   /** Credits per second from living services (paid during waves and lulls only). */
   income() {
-    return Object.entries(INCOME).reduce((n, [type, rate]) => n + (this.service(type)?.tier ?? 0) * rate, 0);
+    return (
+      Object.entries(INCOME).reduce((n, [type, rate]) => n + (this.service(type)?.tier ?? 0) * rate, 0) *
+      this.mods.income
+    );
   }
   equipmentIssue(type) {
     if (type === 'helicopter' && (this.service('lab')?.tier ?? 0) < 2) return 'Centre aérien niveau 2 requis';
@@ -283,7 +397,7 @@ export class CityGame {
     if (!d) return 'Choisissez un équipement';
     if (!['prepare', 'wave', 'interval'].includes(this.phase)) return 'La manche est terminée';
     if (this.equipmentIssue(type)) return this.equipmentIssue(type);
-    if (this.money < d.cost) return 'Budget insuffisant';
+    if (this.money < this.costOf(type)) return 'Budget insuffisant';
     if (!road(x, y)) return 'Choisissez une rue';
     if (x < EDGE_MIN + 2 || y < EDGE_MIN + 2 || x > EDGE_MAX - 2 || y > EDGE_MAX - 2)
       return 'Laissez les accès de rassemblement libres';
@@ -306,7 +420,7 @@ export class CityGame {
       return null;
     }
     const d = EQUIPMENT[type];
-    this.spend(d.cost);
+    this.spend(this.costOf(type));
     const id = this.nextId++;
     if (d.unit) {
       this.units.push({
@@ -352,7 +466,7 @@ export class CityGame {
           p.pathVersion = -1;
         }
     } else if (type === 'impulse') {
-      this.nextImpulse = this.time + 8;
+      this.nextImpulse = this.time + this.mods.impulse;
       for (const p of this.crowd)
         if (p.state === 'march' && dist(p, { x, y }) < d.range) {
           p.stun = Math.max(p.stun, 1.8);
@@ -488,6 +602,10 @@ export class CityGame {
       return false;
     }
     if (!['prepare', 'interval'].includes(this.phase)) return false;
+    if (this.draft) {
+      this.emit('toast', { text: 'Choisissez d’abord une carte.' });
+      return false;
+    }
     this.phase = 'wave';
     this.wave++;
     this.countdown = 0;
@@ -508,7 +626,9 @@ export class CityGame {
   wavePlan(n) {
     if (n < 1 || n > this.def.waves) return [];
     const planned = this.def.plan?.[n - 1] ?? (this.def.endless ? this.escalateRound(n) : null);
-    const total = planned?.count ?? Math.round(this.def.base * 0.6) + (n - 1) * 14,
+    const total = Math.round(
+        (planned?.count ?? Math.round(this.def.base * 0.6) + (n - 1) * 14) * this.mods.crowd
+      ),
       available = this.def.entrances,
       gates =
         planned?.gates ??
@@ -579,7 +699,7 @@ export class CityGame {
       release: r.release,
       gate: r.gate,
       target: r.target ?? (r.target = this.targetFor(r.gate)),
-      speed: d.speed * (0.9 + this.rng.next() * 0.2) * (1 + (tier - 1) * 0.05),
+      speed: d.speed * (0.9 + this.rng.next() * 0.2) * (1 + (tier - 1) * 0.05) * this.mods.crowdSpeed,
       path: [],
       pathVersion: -1,
       stun: 0,
@@ -611,6 +731,7 @@ export class CityGame {
       // Ground police contact (or a drone mark) means an arrest: the person sits and waits for a van.
       if (p.marked || u?.type === 'patrol' || u?.type === 'shield') {
         Object.assign(p, { state: 'held', heldAt: this.time, path: [], van: null, moving: false });
+        this.noteArrest(p);
         this.fx('disperse', p.x, p.y, '#9fc7ef', 0.5);
         return;
       }
@@ -678,7 +799,11 @@ export class CityGame {
       const range = d.range * (1 + (u.tier - 1) * 0.08),
         targets = near.filter(p => dist(p, u) < range);
       if (!targets.length) continue;
-      const power = d.power * (1 + (u.tier - 1) * 0.42) * (this.force ? 1.6 : 1),
+      const power =
+          d.power *
+          (1 + (u.tier - 1) * 0.42) *
+          (this.force ? 1.6 : 1) *
+          (['patrol', 'shield'].includes(u.type) ? this.mods.ground : 1),
         cap =
           u.type === 'helicopter'
             ? 18
@@ -797,11 +922,22 @@ export class CityGame {
         const next = van.path[0];
         if (!next) {
           if (van.state === 'back') {
-            this.money += van.cargo * 4;
+            const pay = van.cargo * (4 + this.mods.arrestPay);
+            this.money += pay;
             this.stats.arrested = (this.stats.arrested ?? 0) + van.cargo;
             if (van.cargo) {
               this.fx('deploy', van.x, van.y, '#9fc7ef', 0.9);
-              this.emit('toast', { text: `${van.cargo} interpellés conduits au poste · +${van.cargo * 4}` });
+              this.emit('toast', { text: `${van.cargo} interpellés conduits au poste · +${pay}` });
+              this.effects.push({
+                kind: 'gain',
+                x: van.x,
+                y: van.y,
+                amount: pay,
+                born: this.time,
+                color: '#ffd166',
+                size: 1,
+                id: this.nextId++,
+              });
             }
             van.state = 'done';
           } else {
@@ -1027,7 +1163,7 @@ export class CityGame {
     this.updateArrests(dt);
     if (this.phase === 'interval') {
       this.updateCrowd(dt);
-      this.countdown -= dt;
+      if (!this.draft) this.countdown -= dt;
       if (this.countdown <= 0) this.startWave();
     }
     if (this.phase === 'wave') {
@@ -1062,6 +1198,7 @@ export class CityGame {
           this.phase = 'interval';
           this.countdown = LULL;
           this.rallies = [];
+          if (this.def.endless) this.offerCards();
         }
       }
     }
@@ -1367,6 +1504,11 @@ export class CityGame {
       'nextRepairFx',
       'vans',
       'decoys',
+      'opts',
+      'mods',
+      'perks',
+      'draft',
+      'combo',
     ];
     const data = { schema: 3, seed: this.rng.seed };
     for (const k of keys) data[k] = structuredClone(this[k]);

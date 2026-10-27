@@ -1,5 +1,5 @@
 /** Single source for the displayed revision and the build's cache-busting query. */
-export const REVISION = '06';
+export const REVISION = '07';
 /** Continuous income per service tier and second, paid during waves and lulls (never while preparing). */
 export const INCOME = { housing: 0.8, market: 1.4, civic: 0.6 };
 export const LULL = 25;
@@ -403,3 +403,57 @@ export function servicePlots() {
   }));
 }
 export const serviceFor = type => Object.keys(SERVICES).find(k => SERVICES[k].unlock.includes(type));
+
+/**
+ * Cards drafted between rounds (pick one of three). `kind` drives the card colour:
+ * boost = immediate help, build = permanent upgrade, risk = a bet with a cost.
+ */
+export const CARDS = {
+  treasury: { name: 'Fonds d’urgence', kind: 'boost', text: '+150 crédits immédiatement.' },
+  commerce: { name: 'Marchés de nuit', kind: 'build', text: 'Revenus des services +50 %.' },
+  bounty: {
+    name: 'Prime d’interpellation',
+    kind: 'build',
+    text: 'Chaque interpellé livré rapporte +3 crédits de plus.',
+  },
+  drill: {
+    name: 'Entraînement intensif',
+    kind: 'build',
+    text: 'Patrouilles et boucliers +30 % d’efficacité.',
+  },
+  surplus: { name: 'Surplus d’équipement', kind: 'build', text: 'Toutes les unités coûtent 20 % de moins.' },
+  reinforcement: {
+    name: 'Renfort immédiat',
+    kind: 'boost',
+    text: 'Une patrouille gratuite devant le palais.',
+  },
+  masonry: { name: 'Maçons de garde', kind: 'boost', text: 'Palais et services entièrement réparés.' },
+  shutters: { name: 'Volets d’acier', kind: 'boost', text: 'Le palais gagne un niveau de façade gratuit.' },
+  speech: { name: 'Discours apaisant', kind: 'boost', text: '+15 % de confiance.' },
+  curfew: { name: 'Couvre-feu', kind: 'build', text: 'La foule avance 10 % moins vite.' },
+  quickpulse: {
+    name: 'Charges rapides',
+    kind: 'build',
+    text: 'L’impulsion se recharge en 4 s au lieu de 8.',
+  },
+  smokes: { name: 'Stock de fumigènes', kind: 'build', text: 'Fumigènes et camions sono à moitié prix.' },
+  gamble: {
+    name: 'Pari : quartier chaud',
+    kind: 'risk',
+    text: '+60 % de prime de fin de manche, mais 25 % de monde en plus.',
+  },
+  loan: {
+    name: 'Pari : emprunt',
+    kind: 'risk',
+    text: '+300 crédits maintenant, mais la foule est 15 % plus nombreuse.',
+  },
+};
+/** Permanent grades earned with XP across runs (local only). */
+export const GRADES = [
+  { xp: 0, name: 'Recrue', perk: 'Départ standard.' },
+  { xp: 250, name: 'Gardien', perk: '+60 crédits au départ.' },
+  { xp: 700, name: 'Brigadier', perk: '4 cartes au choix au lieu de 3.' },
+  { xp: 1500, name: 'Commandant', perk: 'Une relance de cartes par tirage.' },
+  { xp: 3000, name: 'Préfet', perk: 'Une carte offerte avant la manche 1.' },
+];
+export const gradeFor = xp => GRADES.reduce((g, d, i) => (xp >= d.xp ? i : g), 0);

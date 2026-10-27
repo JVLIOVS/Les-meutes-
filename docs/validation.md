@@ -1,3 +1,18 @@
+# Validation — V07 · Envie de rejouer + nuit néon
+
+27 octobre 2026. 40 tests Node passent.
+
+| Livré | Preuve |
+| --- | --- |
+| Cartes entre les manches : 3 au choix (immédiat, permanent ou pari), 14 cartes ; l'accalmie attend le choix | Tests (gel de l'accalmie, effets promis, déterminisme). Navigateur : tirage affiché et choisi. |
+| Grades permanents (XP = manches × 20 + interpellés) : +60 crédits, 4 cartes, relance, carte offerte avant la manche 1 | Tests. |
+| Défi du jour : même graine pour tous (date), record du jour | Test (mêmes cartes à graine égale, sauvegarde/reprise conserve la partie). |
+| Rafle : compteur « RAFLE ×N » sur la carte ; gains « +N » flottants à la livraison des fourgons | Test du combo ; capture. |
+| Vitesse ×1/×2/×3 | Navigateur. |
+| Nuit néon : sol et rues sombres, marquages cyan, passages magenta, toits cerclés de néon, halos (lampadaires, services, palais, police, gyrophares, projecteur d'hélico, foule) et vignettage | Captures ordinateur et 390 × 844, aucune erreur console. Pas de mesure d'images par seconde sur téléphone réel. |
+
+---
+
 # Validation — V06 · Survie par manches
 
 26 octobre 2026. 35 tests Node passent.

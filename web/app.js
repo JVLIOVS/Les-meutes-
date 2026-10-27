@@ -8,6 +8,9 @@ import {
   FORTIFICATIONS,
   REVISION,
   GATES,
+  CARDS,
+  GRADES,
+  gradeFor,
 } from './data.js';
 import { CityGame } from './sim.js';
 import { CityRenderer } from './render.js';
@@ -25,6 +28,7 @@ const fresh = () => ({
   music: true,
   mission: null,
   played: false,
+  daily: null,
   best: 0,
   arrestedTotal: 0,
 });
@@ -124,16 +128,26 @@ function renderCampaign() {
   // Survival by rounds replaces the six-map campaign: one city, rounds until the palace falls.
   selectedLevel = 0;
   document.querySelector('.campaign').hidden = true;
+  const g = gradeFor(save.xp),
+    next = GRADES[g + 1];
   $('home-progress').textContent =
-    `SURVIE PAR MANCHES · RECORD : ${save.best ? 'MANCHE ' + save.best : 'À ÉTABLIR'} · ${save.arrestedTotal} INTERPELLÉS AU TOTAL`;
+    `GRADE ${GRADES[g].name.toUpperCase()} · ${save.xp} XP${next ? ` · ${next.name} à ${next.xp} XP` : ''} · RECORD : ${save.best ? 'MANCHE ' + save.best : 'À ÉTABLIR'}`;
+  const done = save.daily?.date === today();
+  $('daily').innerHTML =
+    `DÉFI DU JOUR <small>${done ? 'record du jour : manche ' + save.daily.best : 'même ville, mêmes cartes pour tous'}</small>`;
   $('resume').hidden = !save.mission;
   $('start').innerHTML = `JOUER ${icon('arrow')}`;
 }
-function start(level, resume = false) {
+const today = () => new Date().toISOString().slice(0, 10);
+function start(level, resume = false, daily = false) {
   sound.unlock();
   if (!unlocked(level) && !resume) return;
   try {
-    game = resume ? CityGame.restore(save.mission) : new CityGame(level, 71 + save.xp);
+    // Daily challenge: everyone gets the same seed (date), so the same rounds and the same cards.
+    const seed = daily ? Number(today().replaceAll('-', '')) : 71 + save.xp + Math.floor(Math.random() * 1e6);
+    game = resume
+      ? CityGame.restore(save.mission)
+      : new CityGame(level, seed, { grade: gradeFor(save.xp), daily });
   } catch {
     save.mission = null;
     persist();
@@ -200,11 +214,11 @@ function renderPalette() {
     b.style.setProperty('--tool-color', d.color);
     b.setAttribute(
       'aria-label',
-      `${d.name} · ${existing ? (existing.state === 'building' ? 'en construction' : 'niveau ' + existing.tier) : issue || d.cost + ' crédits'}`
+      `${d.name} · ${existing ? (existing.state === 'building' ? 'en construction' : 'niveau ' + existing.tier) : issue || (constructing ? d.cost : game.costOf(type)) + ' crédits'}`
     );
     b.setAttribute('aria-pressed', String(actual === tool));
     b.title = issue || d.desc;
-    b.innerHTML = `<span class="tool-top">${icon(d.icon)}<span class="price${issue ? ' locked' : ''}">${existing ? (existing.state === 'building' ? 'EN COURS' : 'NIV. ' + existing.tier) : issue && issue !== 'Budget insuffisant' ? 'REQUIS' : d.cost}</span></span><b>${d.short}</b><kbd>${i + 1}</kbd>`;
+    b.innerHTML = `<span class="tool-top">${icon(d.icon)}<span class="price${issue ? ' locked' : ''}">${existing ? (existing.state === 'building' ? 'EN COURS' : 'NIV. ' + existing.tier) : issue && issue !== 'Budget insuffisant' ? 'REQUIS' : constructing ? d.cost : game.costOf(type)}</span></span><b>${d.short}</b><kbd>${i + 1}</kbd>`;
     b.onclick = () => {
       if (existing) return showSelection({ type: 'service', id: existing.id });
       // Locked cards stay tappable: they explain how to unlock them instead of doing nothing.
@@ -236,7 +250,40 @@ function updateDescription() {
         : 'Touchez une unité ou un bâtiment pour agir.';
   $('cancel-tool').hidden = !tool && !moving;
 }
+/** Card draft between rounds: an overlay that cannot be dismissed without choosing. */
+function showDraft() {
+  const d = game.draft,
+    label = { boost: 'IMMÉDIAT', build: 'PERMANENT', risk: 'PARI' };
+  showOverlay(
+    `<p class="eyebrow">MANCHE ${game.wave} TENUE · CHOISISSEZ UN ATOUT</p><h2>${game.wave ? 'La ville respire.' : 'Avant la première manche.'}</h2><div class="draft">${d.cards
+      .map(
+        id =>
+          `<button class="draft-card ${CARDS[id].kind}" data-card="${id}"><small>${label[CARDS[id].kind]}</small><b>${CARDS[id].name}</b><span>${CARDS[id].text}</span></button>`
+      )
+      .join(
+        ''
+      )}</div>${d.rerolls ? `<div class="overlay-actions"><button class="secondary" id="reroll">RELANCER (${d.rerolls})</button></div>` : ''}`,
+    card => {
+      for (const b of card.querySelectorAll('[data-card]'))
+        b.onclick = () => {
+          game.pickCard(b.dataset.card);
+          sound.play('place');
+          closeOverlay();
+          renderPalette();
+          events();
+          saveMission();
+        };
+      const r = card.querySelector('#reroll');
+      if (r)
+        r.onclick = () => {
+          game.rerollCards();
+          showDraft();
+        };
+    }
+  );
+}
 function updateHud() {
+  if (game.draft && $('overlay').hidden && mode === 'game') showDraft();
   if (!game) return;
   $('district-name').textContent = 'V' + REVISION + ' · ' + DISTRICTS[game.level].name;
   $('district-name').title = DISTRICTS[game.level].objective;
@@ -530,12 +577,20 @@ function result() {
     record = reached > save.best;
   save.best = Math.max(save.best, reached);
   save.arrestedTotal += game.stats.arrested ?? 0;
+  const before = gradeFor(save.xp),
+    xp = reached * 20 + (game.stats.arrested ?? 0);
+  save.xp += xp;
+  const promoted = gradeFor(save.xp) > before ? GRADES[gradeFor(save.xp)] : null;
+  if (game.opts?.daily) {
+    const best = save.daily?.date === today() ? save.daily.best : 0;
+    save.daily = { date: today(), best: Math.max(best, reached) };
+  }
   persist();
   const causes = game.debrief();
   showOverlay(
     `<p class="eyebrow">${game.def.name.toUpperCase()} · BILAN</p><h2>${record ? 'Nouveau record.' : 'Le palais est tombé.'}</h2><p>${game.reason}</p><div class="result-stats"><div><b>${reached}</b><span>MANCHE ATTEINTE</span></div><div><b>${game.stats.arrested ?? 0}</b><span>INTERPELLÉS</span></div><div><b>${save.best}</b><span>RECORD</span></div></div>${
       causes.length ? `<ul class="debrief">${causes.map(line => `<li>${line}</li>`).join('')}</ul>` : ''
-    }<div class="overlay-actions"><button class="primary" id="result-next">REJOUER ${icon('arrow')}</button><button class="secondary" id="result-home">ACCUEIL</button></div>`,
+    }<p>+${xp} XP${promoted ? ` · <b>Promotion : ${promoted.name}</b> — ${promoted.perk}` : ''}</p><div class="overlay-actions"><button class="primary" id="result-next">REJOUER ${icon('arrow')}</button><button class="secondary" id="result-home">ACCUEIL</button></div>`,
     card => {
       card.querySelector('#result-next').onclick = () => start(0);
       card.querySelector('#result-home').onclick = home;
@@ -556,7 +611,7 @@ function events() {
       toast(`${game.def.endless ? 'Manche' : 'Vague'} ${game.wave} : les rassemblements arrivent.`, 3);
       sound.play('wave');
     } else if (e.type === 'clear') {
-      toast(`Vague contenue · +${game.waveReward()} crédits`, 3);
+      toast(`Manche ${game.wave} tenue · +${game.waveReward()} crédits`, 3);
       sound.play('place');
       saveMission();
     } else if (e.type === 'place') sound.play('place');
@@ -573,6 +628,7 @@ function events() {
   }
 }
 $('start').onclick = () => start(selectedLevel);
+$('daily').onclick = () => start(0, false, true);
 $('resume').onclick = () => start(save.mission?.level ?? 0, true);
 $('home-help').onclick = help;
 $('guide').onclick = help;
@@ -592,7 +648,7 @@ $('launch').onclick = () => {
   } else events();
 };
 $('speed').onclick = () => {
-  speed = speed === 1 ? 2 : 1;
+  speed = speed === 3 ? 1 : speed + 1;
   $('speed').textContent = speed + '×';
 };
 $('cancel-tool').onclick = () => {

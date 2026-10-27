@@ -2064,3 +2064,66 @@ h1 > span {
     overscroll-behavior-x: contain;
   }
 }
+
+/* V07 — card draft and daily challenge */
+.draft {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.draft-card {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: 1px solid #ffffff22;
+  background: #ffffff0d;
+  color: #e8eef0;
+  cursor: pointer;
+  min-height: 120px;
+  align-content: start;
+}
+.draft-card:hover,
+.draft-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: #ffffff66;
+}
+.draft-card small {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+}
+.draft-card b {
+  font-size: 15px;
+}
+.draft-card span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #c4d2d6;
+}
+.draft-card.boost small {
+  color: #8fe3c0;
+}
+.draft-card.build small {
+  color: #8cc3ff;
+}
+.draft-card.risk {
+  border-color: #ff7a9a66;
+}
+.draft-card.risk small {
+  color: #ff8aa6;
+}
+.daily small {
+  display: block;
+  font-size: 9px;
+  opacity: 0.75;
+  letter-spacing: 0.06em;
+}
+.daily {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  min-width: 150px;
+}
