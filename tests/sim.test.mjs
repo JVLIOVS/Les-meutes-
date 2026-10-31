@@ -663,3 +663,40 @@ test('quick arrests build a rafle combo', () => {
   assert.equal(g.combo.count, 1);
   assert.equal(g.combo.best, 4);
 });
+
+// V08 — fewer taps: buildings train their troops, one repair-everything action.
+test('upgrading a building trains all its troops, and new recruits arrive trained', () => {
+  const g = funded();
+  const command = build(g, 'command');
+  const id = g.place('patrol', 3, 2);
+  const u = g.units.find(u => u.id === id);
+  assert.equal(u.tier, 1);
+  g.upgradeService(command.id);
+  step(g, 6.1);
+  assert.equal(u.tier, 2);
+  assert.equal(u.maxHp, Math.round(150 * 1.25));
+  const freshId = g.place('patrol', 9, 2),
+    fresh = g.units.find(v => v.id === freshId);
+  assert.equal(fresh.tier, 2);
+  assert.equal(fresh.maxHp, Math.round(150 * 1.25));
+});
+test('repair everything: one action, palace first, priced in advance, never overspends', () => {
+  const g = funded();
+  build(g, 'command');
+  build(g, 'workshop');
+  g.reinforce(3);
+  const unitId = g.place('patrol', 3, 2),
+    unit = g.units.find(u => u.id === unitId);
+  g.damageBuilding(g.primary, 300);
+  unit.hp = 20;
+  const cost = g.repairAllCost();
+  assert.equal(cost, 50 + 30 + 30);
+  const money = g.money;
+  assert.equal(g.repairAll(), 3);
+  assert.equal(g.money, money - cost);
+  assert.equal(g.repairAllCost(), 30, 'only the second unit heal step is left');
+  g.money = 40;
+  g.damageBuilding(g.primary, 10);
+  assert.ok(g.repairAll() >= 1);
+  assert.ok(g.money >= 0);
+});

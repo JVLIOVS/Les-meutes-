@@ -1,3 +1,16 @@
+# Validation — V08 · Moins de boutons, plus d'effet
+
+31 octobre 2026. 42 tests Node passent.
+
+| Livré | Preuve |
+| --- | --- |
+| Amélioration d'un bâtiment en une touche depuis sa carte de palette (prix affiché, carte dorée quand c'est payable) | Navigateur 390 × 844 : une touche → niveau 2 en 6 s. |
+| Plus d'amélioration unité par unité : un bâtiment qui monte de niveau forme toutes ses troupes ; les recrues arrivent formées | Test ; navigateur (2 patrouilles passées niveau 2). |
+| TOUT RÉPARER : palais et services (structure, façade), troupes, barrages, dans cet ordre, prix affiché, sans dépasser le budget | Test ; navigateur (60 crédits, 2 réparations). |
+| Boutons du panneau de sélection en pleine largeur, 48 px de haut ; unités sélectionnables à 1,3 case au lieu de 0,85 | Capture. |
+
+---
+
 # Validation — V07 · Envie de rejouer + nuit néon
 
 27 octobre 2026. 40 tests Node passent.

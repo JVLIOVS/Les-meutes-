@@ -27,6 +27,7 @@ Jeu solo web de construction + défense urbaine en **survie par manches** (sans 
 - Sauvegardes : rester compatible schéma 1–3 (champs nouveaux avec valeurs par défaut).
 
 - Boucle de rejeu : à chaque manche tenue, tirage de cartes (`CARDS`, `offerCards`/`pickCard`) qui **gèle l'accalmie** jusqu'au choix ; effets via `this.mods` uniquement. Grades permanents (`GRADES`, XP locale). Défi du jour = graine = date (mêmes manches et cartes pour tous). Le tirage utilise le RNG de la partie : ne pas l'appeler ailleurs sans raison.
+- Ergonomie : peu de boutons. Un bâtiment s'améliore d'une touche sur sa carte et forme ses troupes (`trainUnits`, pas d'amélioration par unité dans l'interface). `repairAll()`/`repairPlan()` pour TOUT RÉPARER. Cibles tactiles ≥ 48 px.
 - Direction artistique : **nuit néon** (sol sombre, arêtes de toit lumineuses, couche additive `lights()`). Garder la lisibilité : la foule reste orange, la police bleue.
 - Cibles : App Store et Google Play via Capacitor (prochaine étape). Sécurité : tout le code embarqué, aucun chargement distant, pas d'`eval`, pas de SDK de traçage.
 

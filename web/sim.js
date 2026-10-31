@@ -382,6 +382,45 @@ export class CityGame {
     }
     return descend(field, from);
   }
+  trainingTier(type) {
+    return clamp(this.service(serviceFor(type))?.tier ?? 1, 1, 3);
+  }
+  /** Upgrading a building trains every unit it recruits: no per-unit upgrade taps. */
+  trainUnits(service) {
+    for (const u of this.units)
+      if (u.hp > 0 && serviceFor(u.type) === service.type && u.tier < service.tier) {
+        u.tier = service.tier;
+        u.maxHp = Math.round(u.maxHp * 1.25);
+        u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.35);
+        this.fx('deploy', u.x, u.y, '#f5dc9d', 1.1);
+      }
+  }
+  /** Everything "Tout réparer" would do, most important first, with its price. */
+  repairPlan() {
+    const plan = [],
+      workshop = this.service('workshop');
+    for (const b of this.targets.filter(b => !b.decoy)) {
+      if (workshop && b.hp > 0 && b.hp < b.maxHp && !this.repairJobs.some(j => j.id === b.id))
+        plan.push({ cost: 50, run: () => this.queueRepair(b.id) });
+      if (b.armorMax && b.armorHp < b.armorMax) plan.push({ cost: 30, run: () => this.repairArmor(b.id) });
+    }
+    for (const u of this.units)
+      if (u.hp > 0 && u.hp < u.maxHp) plan.push({ cost: 30, run: () => this.repair('unit', u.id) });
+    for (const b of this.barriers)
+      if (b.hp > 0 && b.hp < b.maxHp) plan.push({ cost: 30, run: () => this.repair('barrier', b.id) });
+    return plan;
+  }
+  repairAllCost() {
+    return this.repairPlan().reduce((n, j) => n + j.cost, 0);
+  }
+  /** Runs the plan in order while money lasts; returns how many repairs were done. */
+  repairAll() {
+    let done = 0;
+    for (const job of this.repairPlan()) if (this.money >= job.cost && job.run()) done++;
+    if (done)
+      this.emit('toast', { text: `${done} réparation${done > 1 ? 's' : ''} lancée${done > 1 ? 's' : ''}.` });
+    return done;
+  }
   /** Every debit goes through here so stats.spent always matches the money actually paid. */
   spend(amount) {
     if (this.money < amount) return false;
@@ -423,14 +462,17 @@ export class CityGame {
     this.spend(this.costOf(type));
     const id = this.nextId++;
     if (d.unit) {
+      // Troops arrive trained to the level of the building that recruits them.
+      const tier = this.trainingTier(type),
+        hp = Math.round(d.hp * 1.25 ** (tier - 1));
       this.units.push({
         id,
         type,
         x,
         y,
-        hp: d.hp,
-        maxHp: d.hp,
-        tier: 1,
+        hp,
+        maxHp: hp,
+        tier,
         born: this.time,
         cooldown: 0,
         path: [],
@@ -1331,6 +1373,7 @@ export class CityGame {
           s.tier++;
           s.maxHp += 80;
           s.hp = Math.min(s.maxHp, s.hp + 80);
+          this.trainUnits(s);
           this.emit('toast', { text: SERVICES[s.type].short + ' · niveau ' + s.tier });
         }
       }

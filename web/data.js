@@ -1,5 +1,5 @@
 /** Single source for the displayed revision and the build's cache-busting query. */
-export const REVISION = '07';
+export const REVISION = '08';
 /** Continuous income per service tier and second, paid during waves and lulls (never while preparing). */
 export const INCOME = { housing: 0.8, market: 1.4, civic: 0.6 };
 export const LULL = 25;

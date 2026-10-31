@@ -1309,7 +1309,9 @@ export class CityRenderer {
       if (Math.hypot((sx - q.x) / 1.6, sy - q.y) < this.tile * 1.3) return { type: 'service', id: b.id };
     }
     const ground = this.unproject(sx, sy),
-      unit = game.units.find(u => dist(u, ground) < 0.85);
+      unit = game.units
+        .filter(u => dist(u, ground) < 1.3)
+        .sort((a, b) => dist(a, ground) - dist(b, ground))[0];
     if (unit) return { type: 'unit', id: unit.id };
     // Use the rendered six-sided prism silhouette, avoiding invisible rectangular hit areas.
     const inside = poly => {

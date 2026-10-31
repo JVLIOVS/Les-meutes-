@@ -193,8 +193,21 @@ function selectTool(type) {
   updateDescription();
   sound.play('place');
 }
+function upgradeLabel(s) {
+  const cost = 80 + s.tier * 40;
+  if (s.state === 'building') return { text: 'EN COURS' };
+  if (s.state === 'ruin') return { text: 'RUINE' };
+  if (s.upgrading) return { text: `⬆ ${Math.ceil(s.upgrading)} s` };
+  if (s.tier >= 3) return { text: 'NIV. MAX' };
+  return { text: `NIV.${s.tier} ⬆${cost}`, ready: game.money >= cost };
+}
 function renderPalette() {
   if (!game) return;
+  // A construction tool whose building now exists has done its job: drop it.
+  if (tool?.startsWith('build:') && game.canBuild(tool.slice(6)) === 'Ce service existe déjà') {
+    tool = null;
+    view.tool = null;
+  }
   const constructing = paletteMode === 'build';
   $('palette').classList.toggle('building-palette', constructing);
   document
@@ -218,8 +231,19 @@ function renderPalette() {
     );
     b.setAttribute('aria-pressed', String(actual === tool));
     b.title = issue || d.desc;
-    b.innerHTML = `<span class="tool-top">${icon(d.icon)}<span class="price${issue ? ' locked' : ''}">${existing ? (existing.state === 'building' ? 'EN COURS' : 'NIV. ' + existing.tier) : issue && issue !== 'Budget insuffisant' ? 'REQUIS' : constructing ? d.cost : game.costOf(type)}</span></span><b>${d.short}</b><kbd>${i + 1}</kbd>`;
+    const up = existing && upgradeLabel(existing);
+    b.classList.toggle('can-upgrade', !!up?.ready);
+    b.innerHTML = `<span class="tool-top">${icon(d.icon)}<span class="price${issue ? ' locked' : ''}">${existing ? up.text : issue && issue !== 'Budget insuffisant' ? 'REQUIS' : constructing ? d.cost : game.costOf(type)}</span></span><b>${d.short}</b><kbd>${i + 1}</kbd>`;
     b.onclick = () => {
+      // A built service's card upgrades it in one tap (and trains its troops); otherwise show details.
+      if (existing && upgradeLabel(existing).ready) {
+        game.upgradeService(existing.id);
+        toast(`${SERVICES[type].short} → niveau ${existing.tier + 1} dans 6 s · troupes formées`);
+        sound.play('place');
+        renderPalette();
+        saveMission();
+        return;
+      }
       if (existing) return showSelection({ type: 'service', id: existing.id });
       // Locked cards stay tappable: they explain how to unlock them instead of doing nothing.
       if (issue && issue !== 'Budget insuffisant') return toast(unlockHelp(type), 7);
@@ -284,6 +308,11 @@ function showDraft() {
 }
 function updateHud() {
   if (game.draft && $('overlay').hidden && mode === 'game') showDraft();
+  const repairCost = game.repairAllCost();
+  $('repair-all').disabled = !repairCost || game.money < 30;
+  $('repair-all').innerHTML = repairCost
+    ? `TOUT RÉPARER <small>${repairCost} CR.</small>`
+    : 'TOUT RÉPARER <small>RIEN À FAIRE</small>';
   if (!game) return;
   $('district-name').textContent = 'V' + REVISION + ' · ' + DISTRICTS[game.level].name;
   $('district-name').title = DISTRICTS[game.level].objective;
@@ -335,7 +364,12 @@ function updateHud() {
   $('force').innerHTML =
     `RENFORCÉ <small>${game.rank < 3 ? 'RANG 3' : game.force ? 'ACTIF · CONFIANCE ↓' : 'DISPONIBLE'}</small>`;
   const nextTech =
-    game.services.map(s => `${s.type}:${s.state}:${s.tier}`).join('|') +
+    game.services
+      .map(
+        s =>
+          `${s.type}:${s.state}:${s.tier}:${Math.ceil(s.upgrading ?? 0)}:${game.money >= 80 + s.tier * 40 ? 1 : 0}`
+      )
+      .join('|') +
     Object.values(SERVICES)
       .map(d => (game.money >= d.cost ? '1' : '0'))
       .join('');
@@ -514,17 +548,6 @@ function updateSelection(force = false) {
       false,
       true
     );
-    const cost = Math.round(EQUIPMENT[obj.type].cost * 0.65),
-      tech = game.service(serviceFor(obj.type))?.tier ?? 0;
-    add(
-      obj.tier >= 3
-        ? 'NIVEAU MAX.'
-        : tech < obj.tier + 1
-          ? `SERVICE NIV. ${obj.tier + 1} REQUIS`
-          : `AMÉLIORER · ${cost}`,
-      () => game.upgradeUnit(obj.id),
-      obj.tier >= 3 || tech < obj.tier + 1 || game.money < cost
-    );
     add('SOIGNER · 30', () => game.repair('unit', obj.id), obj.hp >= obj.maxHp || game.money < 30);
   } else {
     add('RÉPARER · 30', () => game.repair('barrier', obj.id), obj.hp >= obj.maxHp || game.money < 30);
@@ -629,6 +652,11 @@ function events() {
 }
 $('start').onclick = () => start(selectedLevel);
 $('daily').onclick = () => start(0, false, true);
+$('repair-all').onclick = () => {
+  if (game.repairAll()) sound.play('place');
+  events();
+  saveMission();
+};
 $('resume').onclick = () => start(save.mission?.level ?? 0, true);
 $('home-help').onclick = help;
 $('guide').onclick = help;

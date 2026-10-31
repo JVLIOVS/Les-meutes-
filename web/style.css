@@ -2127,3 +2127,31 @@ h1 > span {
   text-align: left;
   min-width: 150px;
 }
+
+/* V08 — bigger, fewer controls: one-tap upgrades, repair everything */
+.selection .sel-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.selection .sel-actions button {
+  min-height: 48px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+.tool.can-upgrade {
+  box-shadow:
+    0 0 0 2px #ffd166aa inset,
+    0 0 14px #ffd16655;
+}
+.tool.can-upgrade .price {
+  color: #ffd166;
+}
+#repair-all small {
+  display: block;
+  font-size: 8px;
+  opacity: 0.8;
+}
+#repair-all:disabled {
+  opacity: 0.45;
+}
